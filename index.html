@@ -1,0 +1,980 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>展示会ナビ</title>
+<meta name="description" content="展示会の予定づくりと会場ナビ。行きたい会社を入れると、近い順に回る時間割を組み、会場の地図で次の小間まで案内します。（デモは架空の会場・出展社のデータ）">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d9480f'/%3E%3Cpath d='M32 12a14 14 0 0 0-14 14c0 10 14 26 14 26s14-16 14-26a14 14 0 0 0-14-14zm0 19a5 5 0 1 1 0-10 5 5 0 0 1 0 10z' fill='%23fff'/%3E%3C/svg%3E">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 1カラムの時刻表：左に時刻レール、右にホールごとのカード。ホール色は会場マップ（東=ピンク・西=青・南=緑）に合わせる */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --fg:#1b2430; --muted:#5d6a78; --line:#d9dfe6;
+  --accent:#d9480f; --star-bg:#fff1e8;
+  --east:#c2185b; --west:#1f4fa0; --south:#2e7d4f; --move:#6b7684;
+  --done:#9aa5b1;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Consolas",monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2128; --fg:#e7ecf1; --muted:#9aa7b4; --line:#2c343e;
+  --accent:#ff7a3d; --star-bg:#2e2016;
+  --east:#f06a9b; --west:#6f9cf0; --south:#5fc28a; --move:#8b96a3; --done:#5d6875; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2128; --fg:#e7ecf1; --muted:#9aa7b4; --line:#2c343e;
+  --accent:#ff7a3d; --star-bg:#2e2016;
+  --east:#f06a9b; --west:#6f9cf0; --south:#5fc28a; --move:#8b96a3; --done:#5d6875; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:640px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:19px;font-weight:900;margin:0;text-wrap:balance;letter-spacing:.02em}
+h1 small{display:block;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.prog{font-family:var(--f-mono);font-size:13px;font-weight:600;color:var(--accent);background:var(--star-bg);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:14px;font-size:14px}
+.note b{color:var(--accent)}
+.tl{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:14px}
+.slot{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px}
+.time{font-family:var(--f-mono);font-size:13px;font-weight:600;color:var(--muted);padding-top:12px;text-align:right;line-height:1.3}
+.time span{display:block;font-weight:500;font-size:11px}
+.card{min-width:0;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--hall);border-radius:10px;padding:10px 12px 8px}
+.card.plain{border-left-color:var(--move);background:transparent}
+.hall{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hall strong{font-size:16px;font-weight:700;color:var(--hall)}
+.card.plain .hall strong{color:var(--fg)}
+.hall em{font-style:normal;font-size:12px;color:var(--muted)}
+.sub{font-size:13px;color:var(--muted);margin:4px 0 0}
+.items{list-style:none;margin:6px 0 0;padding:0;display:grid}
+.items li{border-top:1px dashed var(--line)}
+.items li:first-child{border-top:0}
+.items label{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;cursor:pointer}
+.items input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.items .nm{min-width:0}
+.items .tag{font-size:11px;color:var(--muted);margin-left:4px}
+.items li.star .nm{font-weight:700}
+.items li.star .nm::before{content:"★ ";color:var(--accent)}
+.items li.star{background:var(--star-bg);margin-inline:-12px;padding-inline:12px}
+.items li.done .nm{color:var(--done);text-decoration:line-through}
+.booth{font-family:var(--f-mono);font-size:12.5px;font-weight:600;color:var(--hall);border:1px solid var(--hall);border-radius:6px;padding:2px 7px;text-decoration:none;white-space:nowrap}
+.booth:focus-visible,.items input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.text-only{padding:6px 0;font-size:14px}
+h2{font-size:15px;font-weight:700;margin:28px 0 8px;letter-spacing:.04em}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:14px}
+.box p{margin:0 0 6px}.box p:last-child{margin:0}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td{padding:7px 4px;border-top:1px solid var(--line);vertical-align:top}
+tr:first-child td{border-top:0}
+td.st{white-space:nowrap;font-weight:700}
+.ok{color:var(--south)}.ng{color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.reset{margin-top:14px;font:inherit;font-size:13px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+@media (prefers-reduced-motion:no-preference){.items li{transition:background .2s}}
+.hbtns{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.ebtn-main{white-space:nowrap;flex-shrink:0;font:inherit;font-size:13px;font-weight:700;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px;cursor:pointer}
+body.editing .ebtn-main{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.time input{display:block;width:100%;font:inherit;font-family:var(--f-mono);font-size:12px;padding:2px 0;margin-bottom:4px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)}
+body.editing .slot{grid-template-columns:78px minmax(0,1fr)}
+.erow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding-top:7px}
+.ebtn{display:flex;flex-wrap:wrap;gap:6px;padding:6px 0 8px}
+.ebtn button,.stools button,.add button{font:inherit;font-size:12.5px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;min-height:32px}
+.ebtn button:disabled,.stools button:disabled{opacity:.35;cursor:default}
+.ebtn .del{color:var(--accent);margin-left:auto}
+.stools{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.add{display:grid;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.add input:not([type=checkbox]){font:inherit;font-size:15px;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.arow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center}
+.astar{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--accent);font-weight:700}
+.add button[type=submit]{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:700}
+.ahint{margin:0;font-size:12px;color:var(--accent)}
+.ahint:empty{display:none}
+.reset.arm{color:var(--accent);border-color:var(--accent)}
+button:focus-visible,.add input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hl{display:flex;align-items:center;gap:10px;min-width:0}
+.hl h1{min-width:0}
+.back{font:inherit;font-size:13px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+.primary{display:block;width:100%;margin-top:14px;font:inherit;font-size:16px;font-weight:700;color:var(--surface);background:var(--accent);border:0;border-radius:10px;padding:12px;cursor:pointer}
+.empty{margin-top:18px;text-align:left;background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:14px}
+.empty p{margin:0 0 6px}
+.empty button,.pact button,.sact button{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+.slist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.sched{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px}
+.sopen{all:unset;cursor:pointer;display:grid;gap:2px}
+.sopen strong{font-size:16px}
+.sopen span{font-size:13px;color:var(--muted);font-family:var(--f-body)}
+.sopen:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.sact{display:flex;gap:8px;flex-wrap:wrap}
+.sact .del{color:var(--accent);margin-left:auto}
+.sact .del.arm{border-color:var(--accent)}
+.setup{display:grid;gap:12px;margin-top:14px}
+.f{display:grid;gap:4px;min-width:0}
+.f span{font-size:12.5px;color:var(--muted);font-weight:500}
+.f input,.f select{font:inherit;font-size:16px;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+.f2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.setup h2{margin:10px 0 0}
+.setup .add{margin-top:0;border-top:0;padding-top:0}
+.picks{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.picks li.star{margin-inline:-12px}
+.warn{margin:0;font-size:13px;color:var(--accent)}
+.warnbox{border-color:var(--accent);color:var(--accent)}
+.pact{display:flex;flex-direction:column;gap:8px;margin-top:20px}
+.foot{margin-top:14px}
+.bk{display:grid;gap:8px}
+.bk .row{display:flex;gap:8px;flex-wrap:wrap}
+.bk button{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;min-height:36px}
+.bk button.go{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:700}
+.bk textarea{font:12px/1.4 var(--f-mono);width:100%;min-width:0;min-height:110px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);word-break:break-all}
+.bk .msg{margin:0;font-size:13px;font-weight:700;color:var(--south)}
+.bk .msg.ng{color:var(--accent)}
+.bk .msg:empty{display:none}
+.stale{border-color:var(--accent)}
+.bkbar{position:sticky;top:calc(env(safe-area-inset-top,0px) + 58px);z-index:4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;background:var(--star-bg);border:1px solid var(--accent);border-radius:10px;padding:8px 10px;font-size:13px;font-weight:700;color:var(--accent)}
+.bkbar span{flex:1 1 160px}
+.bkbar button{font:inherit;font-size:13px;font-weight:700;color:var(--surface);background:var(--accent);border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;max-width:min(92vw,520px);background:var(--fg);color:var(--bg);border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.intro p{margin:0 0 6px}.intro p:last-child{margin:0}
+.isteps{margin:0;padding:12px 14px 12px 32px;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:8px;font-size:15px}
+.isteps li::marker{font-family:var(--f-mono);font-weight:700;color:var(--accent)}
+.resume .primary{margin-top:10px}
+.start{margin-top:14px;background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:12px;display:grid;gap:10px}
+.start .sh{margin:0;font-size:16px;color:var(--accent)}
+.start .sub{margin:0}
+.stgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.stgrid button{display:grid;gap:2px;justify-items:start;text-align:left;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;min-height:56px}
+.stgrid button b{font-size:16px}.stgrid button small{font-size:12px;color:var(--muted)}
+.stgrid button.go{background:var(--accent);border-color:var(--accent);color:var(--surface)}.stgrid button.go small{color:var(--surface);opacity:.9}
+.stgrid.hp button{border-left:5px solid var(--hc)}
+.linkish{justify-self:start;font:inherit;font-size:14px;font-weight:700;color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer}
+.startbar{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700}
+.startbar button{font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane > svg,.leaflet-pane > canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer {position: absolute;left: 0;top: 0;}.leaflet-container {overflow: hidden;}.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow {-webkit-user-select: none;-moz-user-select: none;user-select: none;-webkit-user-drag: none;}.leaflet-tile::selection {background: transparent;}.leaflet-safari .leaflet-tile {image-rendering: -webkit-optimize-contrast;}.leaflet-safari .leaflet-tile-container {width: 1600px;height: 1600px;-webkit-transform-origin: 0 0;}.leaflet-marker-icon,.leaflet-marker-shadow {display: block;}.leaflet-container .leaflet-overlay-pane svg {max-width: none !important;max-height: none !important;}.leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container .leaflet-tile-pane img,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-tile {max-width: none !important;max-height: none !important;width: auto;padding: 0;}.leaflet-container img.leaflet-tile {mix-blend-mode: plus-lighter;}.leaflet-container.leaflet-touch-zoom {-ms-touch-action: pan-x pan-y;touch-action: pan-x pan-y;}.leaflet-container.leaflet-touch-drag {-ms-touch-action: pinch-zoom;touch-action: none;touch-action: pinch-zoom;}.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {-ms-touch-action: none;touch-action: none;}.leaflet-container {-webkit-tap-highlight-color: transparent;}.leaflet-container a {-webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);}.leaflet-tile {filter: inherit;visibility: hidden;}.leaflet-tile-loaded {visibility: inherit;}.leaflet-zoom-box {width: 0;height: 0;-moz-box-sizing: border-box;box-sizing: border-box;z-index: 800;}.leaflet-overlay-pane svg {-moz-user-select: none;}.leaflet-pane         { z-index: 400; }.leaflet-tile-pane    { z-index: 200; }.leaflet-overlay-pane { z-index: 400; }.leaflet-shadow-pane  { z-index: 500; }.leaflet-marker-pane  { z-index: 600; }.leaflet-tooltip-pane   { z-index: 650; }.leaflet-popup-pane   { z-index: 700; }.leaflet-map-pane canvas { z-index: 100; }.leaflet-map-pane svg    { z-index: 200; }.leaflet-vml-shape {width: 1px;height: 1px;}.lvml {behavior: url(#default#VML);display: inline-block;position: absolute;}.leaflet-control {position: relative;z-index: 800;pointer-events: visiblePainted;pointer-events: auto;}.leaflet-top,.leaflet-bottom {position: absolute;z-index: 1000;pointer-events: none;}.leaflet-top {top: 0;}.leaflet-right {right: 0;}.leaflet-bottom {bottom: 0;}.leaflet-left {left: 0;}.leaflet-control {float: left;clear: both;}.leaflet-right .leaflet-control {float: right;}.leaflet-top .leaflet-control {margin-top: 10px;}.leaflet-bottom .leaflet-control {margin-bottom: 10px;}.leaflet-left .leaflet-control {margin-left: 10px;}.leaflet-right .leaflet-control {margin-right: 10px;}.leaflet-fade-anim .leaflet-popup {opacity: 0;-webkit-transition: opacity 0.2s linear;-moz-transition: opacity 0.2s linear;transition: opacity 0.2s linear;}.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {opacity: 1;}.leaflet-zoom-animated {-webkit-transform-origin: 0 0;-ms-transform-origin: 0 0;transform-origin: 0 0;}svg.leaflet-zoom-animated {will-change: transform;}.leaflet-zoom-anim .leaflet-zoom-animated {-webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);-moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);transition:         transform 0.25s cubic-bezier(0,0,0.25,1);}.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile {-webkit-transition: none;-moz-transition: none;transition: none;}.leaflet-zoom-anim .leaflet-zoom-hide {visibility: hidden;}.leaflet-interactive {cursor: pointer;}.leaflet-grab {cursor: -webkit-grab;cursor:    -moz-grab;cursor:         grab;}.leaflet-crosshair,.leaflet-crosshair .leaflet-interactive {cursor: crosshair;}.leaflet-popup-pane,.leaflet-control {cursor: auto;}.leaflet-dragging .leaflet-grab,.leaflet-dragging .leaflet-grab .leaflet-interactive,.leaflet-dragging .leaflet-marker-draggable {cursor: move;cursor: -webkit-grabbing;cursor:    -moz-grabbing;cursor:         grabbing;}.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-image-layer,.leaflet-pane > svg path,.leaflet-tile-container {pointer-events: none;}.leaflet-marker-icon.leaflet-interactive,.leaflet-image-layer.leaflet-interactive,.leaflet-pane > svg path.leaflet-interactive,svg.leaflet-image-layer.leaflet-interactive path {pointer-events: visiblePainted;pointer-events: auto;}.leaflet-container {background: #ddd;outline-offset: 1px;}.leaflet-container a {color: #0078A8;}.leaflet-zoom-box {border: 2px dotted #38f;background: rgba(255,255,255,0.5);}.leaflet-container {font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;font-size: 12px;font-size: 0.75rem;line-height: 1.5;}.leaflet-bar {box-shadow: 0 1px 5px rgba(0,0,0,0.65);border-radius: 4px;}.leaflet-bar a {background-color: #fff;border-bottom: 1px solid #ccc;width: 26px;height: 26px;line-height: 26px;display: block;text-align: center;text-decoration: none;color: black;}.leaflet-bar a,.leaflet-control-layers-toggle {background-position: 50% 50%;background-repeat: no-repeat;display: block;}.leaflet-bar a:hover,.leaflet-bar a:focus {background-color: #f4f4f4;}.leaflet-bar a:first-child {border-top-left-radius: 4px;border-top-right-radius: 4px;}.leaflet-bar a:last-child {border-bottom-left-radius: 4px;border-bottom-right-radius: 4px;border-bottom: none;}.leaflet-bar a.leaflet-disabled {cursor: default;background-color: #f4f4f4;color: #bbb;}.leaflet-touch .leaflet-bar a {width: 30px;height: 30px;line-height: 30px;}.leaflet-touch .leaflet-bar a:first-child {border-top-left-radius: 2px;border-top-right-radius: 2px;}.leaflet-touch .leaflet-bar a:last-child {border-bottom-left-radius: 2px;border-bottom-right-radius: 2px;}.leaflet-control-zoom-in,.leaflet-control-zoom-out {font: bold 18px 'Lucida Console', Monaco, monospace;text-indent: 1px;}.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {font-size: 22px;}.leaflet-control-layers {box-shadow: 0 1px 5px rgba(0,0,0,0.4);background: #fff;border-radius: 5px;}.leaflet-control-layers-toggle {background-image: url(images/layers.png);width: 36px;height: 36px;}.leaflet-retina .leaflet-control-layers-toggle {background-image: url(images/layers-2x.png);background-size: 26px 26px;}.leaflet-touch .leaflet-control-layers-toggle {width: 44px;height: 44px;}.leaflet-control-layers .leaflet-control-layers-list,.leaflet-control-layers-expanded .leaflet-control-layers-toggle {display: none;}.leaflet-control-layers-expanded .leaflet-control-layers-list {display: block;position: relative;}.leaflet-control-layers-expanded {padding: 6px 10px 6px 6px;color: #333;background: #fff;}.leaflet-control-layers-scrollbar {overflow-y: scroll;overflow-x: hidden;padding-right: 5px;}.leaflet-control-layers-selector {margin-top: 2px;position: relative;top: 1px;}.leaflet-control-layers label {display: block;font-size: 13px;font-size: 1.08333em;}.leaflet-control-layers-separator {height: 0;border-top: 1px solid #ddd;margin: 5px -10px 5px -6px;}.leaflet-default-icon-path {background-image: url(images/marker-icon.png);}.leaflet-container .leaflet-control-attribution {background: #fff;background: rgba(255, 255, 255, 0.8);margin: 0;}.leaflet-control-attribution,.leaflet-control-scale-line {padding: 0 5px;color: #333;line-height: 1.4;}.leaflet-control-attribution a {text-decoration: none;}.leaflet-control-attribution a:hover,.leaflet-control-attribution a:focus {text-decoration: underline;}.leaflet-attribution-flag {display: inline !important;vertical-align: baseline !important;width: 1em;height: 0.6669em;}.leaflet-left .leaflet-control-scale {margin-left: 5px;}.leaflet-bottom .leaflet-control-scale {margin-bottom: 5px;}.leaflet-control-scale-line {border: 2px solid #777;border-top: none;line-height: 1.1;padding: 2px 5px 1px;white-space: nowrap;-moz-box-sizing: border-box;box-sizing: border-box;background: rgba(255, 255, 255, 0.8);text-shadow: 1px 1px #fff;}.leaflet-control-scale-line:not(:first-child) {border-top: 2px solid #777;border-bottom: none;margin-top: -2px;}.leaflet-control-scale-line:not(:first-child):not(:last-child) {border-bottom: 2px solid #777;}.leaflet-touch .leaflet-control-attribution,.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar {box-shadow: none;}.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar {border: 2px solid rgba(0,0,0,0.2);background-clip: padding-box;}.leaflet-popup {position: absolute;text-align: center;margin-bottom: 20px;}.leaflet-popup-content-wrapper {padding: 1px;text-align: left;border-radius: 12px;}.leaflet-popup-content {margin: 13px 24px 13px 20px;line-height: 1.3;font-size: 13px;font-size: 1.08333em;min-height: 1px;}.leaflet-popup-content p {margin: 17px 0;margin: 1.3em 0;}.leaflet-popup-tip-container {width: 40px;height: 20px;position: absolute;left: 50%;margin-top: -1px;margin-left: -20px;overflow: hidden;pointer-events: none;}.leaflet-popup-tip {width: 17px;height: 17px;padding: 1px;margin: -10px auto 0;pointer-events: auto;-webkit-transform: rotate(45deg);-moz-transform: rotate(45deg);-ms-transform: rotate(45deg);transform: rotate(45deg);}.leaflet-popup-content-wrapper,.leaflet-popup-tip {background: white;color: #333;box-shadow: 0 3px 14px rgba(0,0,0,0.4);}.leaflet-container a.leaflet-popup-close-button {position: absolute;top: 0;right: 0;border: none;text-align: center;width: 24px;height: 24px;font: 16px/24px Tahoma, Verdana, sans-serif;color: #757575;text-decoration: none;background: transparent;}.leaflet-container a.leaflet-popup-close-button:hover,.leaflet-container a.leaflet-popup-close-button:focus {color: #585858;}.leaflet-popup-scrolled {overflow: auto;}.leaflet-oldie .leaflet-popup-content-wrapper {-ms-zoom: 1;}.leaflet-oldie .leaflet-popup-tip {width: 24px;margin: 0 auto;-ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);}.leaflet-oldie .leaflet-control-zoom,.leaflet-oldie .leaflet-control-layers,.leaflet-oldie .leaflet-popup-content-wrapper,.leaflet-oldie .leaflet-popup-tip {border: 1px solid #999;}.leaflet-div-icon {background: #fff;border: 1px solid #666;}.leaflet-tooltip {position: absolute;padding: 6px;background-color: #fff;border: 1px solid #fff;border-radius: 3px;color: #222;white-space: nowrap;-webkit-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;pointer-events: none;box-shadow: 0 1px 3px rgba(0,0,0,0.4);}.leaflet-tooltip.leaflet-interactive {cursor: pointer;pointer-events: auto;}.leaflet-tooltip-top:before,.leaflet-tooltip-bottom:before,.leaflet-tooltip-left:before,.leaflet-tooltip-right:before {position: absolute;pointer-events: none;border: 6px solid transparent;background: transparent;content: "";}.leaflet-tooltip-bottom {margin-top: 6px;}.leaflet-tooltip-top {margin-top: -6px;}.leaflet-tooltip-bottom:before,.leaflet-tooltip-top:before {left: 50%;margin-left: -6px;}.leaflet-tooltip-top:before {bottom: 0;margin-bottom: -12px;border-top-color: #fff;}.leaflet-tooltip-bottom:before {top: 0;margin-top: -12px;margin-left: -6px;border-bottom-color: #fff;}.leaflet-tooltip-left {margin-left: -6px;}.leaflet-tooltip-right {margin-left: 6px;}.leaflet-tooltip-left:before,.leaflet-tooltip-right:before {top: 50%;margin-top: -6px;}.leaflet-tooltip-left:before {right: 0;margin-right: -12px;border-left-color: #fff;}.leaflet-tooltip-right:before {left: 0;margin-left: -12px;border-right-color: #fff;}@media print {.leaflet-control {-webkit-print-color-adjust: exact;print-color-adjust: exact;}}
+.tomap{display:block;width:100%;margin-top:14px;font:inherit;font-size:15px;font-weight:700;color:var(--accent);background:var(--star-bg);border:1px solid var(--accent);border-radius:10px;padding:10px;cursor:pointer}
+.htabs{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+.htabs::-webkit-scrollbar{display:none}
+.htabs button{flex:0 0 auto;font:inherit;font-size:13px;font-weight:700;color:var(--hc);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.htabs button.on{background:var(--hc);border-color:var(--hc);color:var(--surface)}
+.htabs button i{font-style:normal;font-weight:500;font-size:11px;margin-left:4px;opacity:.85}
+.mpanel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;display:grid;gap:6px;font-size:14px}
+.mrow{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:baseline}
+.mrow>span{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.mrow b{font-weight:700}
+.mrow .bn{font-family:var(--f-mono);font-size:12.5px;font-weight:600;color:var(--accent);margin-left:6px}
+.mrow small{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.mbtns{display:flex;flex-wrap:wrap;gap:6px}
+.mbtns button{font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;min-height:34px}
+.mbtns button.go{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:700}
+.mfind{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.mfind input{font:inherit;font-size:15px;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.mfind button{font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+#jmap{position:relative;z-index:0;isolation:isolate;height:62vh;min-height:340px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#fff;touch-action:none}
+.leaflet-container{font-family:var(--f-body)}
+.pin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--pc);color:#fff;font:700 12px/1 var(--f-mono);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.pin.st{width:30px;height:30px}
+.pin.dn{background:#9aa5b1;opacity:.75}
+.pin.nx{outline:4px solid rgba(217,72,15,.45);outline-offset:1px}
+.me{width:20px;height:20px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 6px rgba(26,115,232,.28),0 1px 4px rgba(0,0,0,.4)}
+.bpf{display:grid;grid-template-columns:auto minmax(0,1fr);min-width:0}
+.bpf .abooth{border-top-left-radius:0!important;border-bottom-left-radius:0!important;font-family:var(--f-mono)!important;letter-spacing:.06em}
+.pfx{display:grid;place-items:center;min-width:46px;padding:2px 8px;font:inherit;line-height:1.1;color:var(--surface);background:var(--fg);border:1px solid var(--fg);border-radius:6px 0 0 6px;cursor:pointer}
+.pfx b{font-family:var(--f-mono);font-size:15px}.pfx small{font-size:9.5px;opacity:.85}
+.mfind{grid-template-columns:minmax(0,1fr)!important}
+.mnum{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.mnum .abooth{font:inherit;font-size:16px;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.add button[data-act=padd]{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:700;padding-inline:14px}
+.arrive{display:block;width:100%;margin-top:10px;font:inherit;font-size:16px;font-weight:900;color:var(--surface);background:var(--accent);border:0;border-radius:10px;padding:13px 12px;cursor:pointer;box-shadow:0 2px 8px rgba(217,72,15,.35)}
+.entnav{display:block;width:100%;margin-top:10px;font:inherit;font-size:15px;font-weight:700;color:var(--accent);background:var(--star-bg);border:2px solid var(--accent);border-radius:10px;padding:11px 12px;cursor:pointer}
+.sitewrap{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sitemap{display:block;width:100%;height:auto;max-height:68vh}
+.sm-hi{fill:none;stroke:#d9480f;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:12 8;opacity:.92}
+@media (prefers-reduced-motion:no-preference){.sm-hi{animation:twdash 1s linear infinite}}
+.sm-esc{fill:none;stroke:#7b2cbf;stroke-width:4;stroke-dasharray:2 7;stroke-linecap:round}
+.sm-t{fill:#7b2cbf;font-weight:700;font-family:var(--f-body);paint-order:stroke;stroke:#fff;stroke-width:3px}
+.pickbtn{justify-self:start;font:inherit;font-size:13px;font-weight:700;color:var(--accent);background:var(--star-bg);border:1px solid var(--accent);border-radius:8px;padding:6px 12px;cursor:pointer;min-height:34px}
+.mfind .pickbtn,.mfind .sugg{grid-column:1/-1}
+.sugg{display:grid;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+.sugg button,.pk-list button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:9px 10px;border-top:1px solid var(--line);cursor:pointer;font-size:14px}
+.sugg button:first-child,.pk-list button:first-child{border-top:0}
+.sugg button:focus-visible,.pk-list button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sugg em,.pk-list em{font-style:normal;font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.pk{position:fixed;inset:0;z-index:50;background:rgba(10,14,18,.45);display:flex;align-items:flex-end;justify-content:center}
+.pk-sheet{width:100%;max-width:640px;max-height:86vh;max-height:86dvh;background:var(--bg);border-radius:14px 14px 0 0;display:flex;flex-direction:column;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.pk-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pk-head strong{font-size:16px}
+.pk-head button{font:inherit;font-size:13px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+.pk-rows,.pk-chars{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:10px}
+.pk-chars{grid-template-columns:repeat(auto-fill,minmax(44px,1fr))}
+.pk-rows button,.pk-chars button{font:inherit;font-size:16px;font-weight:700;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 0;cursor:pointer;min-height:42px}
+.pk-rows button.on,.pk-chars button.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.pk-rows button:disabled,.pk-chars button:disabled{opacity:.3;cursor:default}
+.pk-chars button small{display:block;font-size:10px;font-weight:500;opacity:.8}
+.pk-list{margin-top:10px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:grid;align-content:start;min-height:0;flex:1}
+.pk-hint{margin:10px 0 0;font-size:13px;color:var(--muted)}
+.gate{display:grid;place-items:center;width:44px;height:24px;border-radius:6px;background:#c62828;color:#fff;font:700 12px/1 var(--f-body);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.turn{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px;align-items:center;background:var(--star-bg);border-radius:8px;padding:8px 10px}
+.turn b{font-size:18px;color:var(--accent)}
+.turn small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.tarrow{width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--surface);display:grid;place-items:center;font:900 32px/1 var(--f-body)}
+@media (prefers-reduced-motion:no-preference){.tarrow{transition:transform .3s}}
+.tview{margin-top:8px;display:grid;gap:8px}
+.tw-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tw-head span{margin-left:auto;font-family:var(--f-mono);font-size:13px;font-weight:600;color:var(--accent)}
+.tw{width:100%;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.tw-b{stroke:var(--surface);stroke-width:1;opacity:.35}.tw-b.on{opacity:1}
+.tw-south{fill:var(--south)}.tw-west{fill:var(--west)}.tw-east{fill:var(--east)}
+.tw-atr,.tw-gal,.tw-ent{fill:var(--line)}.tw-conf{fill:var(--fg)}.tw-rest{fill:#e8590c}
+.tw-l{font:700 13px var(--f-body);fill:var(--fg)}.tw-s{font:500 7.5px var(--f-body);fill:var(--muted)}
+.tw-w{fill:#fff}
+.tw-way{fill:none;stroke:var(--muted);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:.35}
+.tw-hi{fill:none;stroke:var(--accent);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:8 6}
+@media (prefers-reduced-motion:no-preference){.tw-hi{animation:twdash 1s linear infinite}@keyframes twdash{to{stroke-dashoffset:-14}}}
+.tw-from{fill:#1a73e8;stroke:#fff;stroke-width:2}.tw-to{fill:#c62828;stroke:#fff;stroke-width:2}
+.tw-steps{margin:0;padding:10px 12px 10px 30px;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:6px;font-size:14.5px}
+.tw-steps li::marker{font-family:var(--f-mono);font-weight:700;color:var(--accent)}
+.fixnote{margin:0;font-size:13px;font-weight:700;color:var(--accent)}
+.mvchk{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:14px;font-weight:700;cursor:pointer}
+.mvchk input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.card.mvdone{opacity:.55}
+.card.mvdone .hall strong{text-decoration:line-through}
+.mnote{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.stale b{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="hl"><button class="back" id="back" type="button" hidden>← 一覧</button>
+    <h1 id="h1">展示会ナビ<small id="h1s">テクノひなた展 2026（架空）</small></h1></div>
+  <div class="hbtns" id="hbtns" hidden><button class="ebtn-main" id="edit" type="button">編集</button><div class="prog" id="prog">★ 0/0</div></div>
+</header>
+<div class="bkbar" id="bkbar" hidden></div>
+<main id="view"></main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script type="module">
+// 会場（ひなた国際展示場）と展示会（テクノひなた展）のデータは data/ の JSON から読み込む。
+// 展示会のデータだけを差し替えれば、別の展示会のナビになる（?event=data/xxx.json）
+const Q=new URLSearchParams(location.search);
+const evUrl=/^(?:[\w-]+\/)*[\w-]+\.json$/.test(Q.get("event")||"")?Q.get("event"):"data/event.json";
+let VENUE,EVENT;
+try{[VENUE,EVENT]=await Promise.all(["data/venue.json",evUrl].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})))}
+catch(e){document.body.innerHTML='<div class="wrap"><p class="note">データを読み込めませんでした。ネットワークを確かめて、開き直してください。</p></div>';throw e}
+const {areas:AREAS,route:ROUTE,seg:SEG,entMin:ENTMIN,entGate:ENTGATE,af:AF,hallmap:HALLMAP,booth:BOOTH,gates:GATES}=VENUE;
+const EX=EVENT.ex,SPECIALS=EVENT.specials,DATES=EVENT.dates,OPEN=EVENT.open,LUNCH_SUB=EVENT.lunchSub,YOMI=EVENT.yomi;
+const PREF={};ROUTE.forEach(a=>AREAS[a].halls.forEach(h=>{PREF[h]=a}));
+
+const KEY="tenji-navi-v1";
+const load=()=>{try{const v=localStorage.getItem(KEY);return v?JSON.parse(v):null}catch(e){return null}};
+let db=load()||{list:[]};
+const store=()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}};
+const save=()=>{db.mod=Date.now();store();if(typeof updBk==="function")try{updBk()}catch(e){}};
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}
+let seq=0;const nid=p=>p+Date.now().toString(36)+(seq++).toString(36);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const toM=t=>{const [h,m]=(t||"0:0").split(":").map(Number);return h*60+m};
+const fmt=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const hm=t=>t?t.replace(/^0(\d)/,"$1"):"";
+const areaOf=it=>it.area||PREF[(it.b||"").slice(0,2)]||"";
+
+// 候補の一覧（社名（小間）と企画）
+const OPTS={};
+EX.forEach(([n,b])=>{OPTS[`${n}（${b}）`]={nm:n,b}});
+SPECIALS.forEach(([n,a,p])=>{OPTS[`${n}（${p}）`]={nm:n,b:"",area:a}});
+function lookup(nm,b){
+  if(b){b=b.toUpperCase();if(!PREF[b.slice(0,2)])return {err:"小間番号の形が違います（例：A1005・B2017・C4033）。"};return {it:{nm,b}}}
+  const sp=SPECIALS.find(([n])=>n===nm);if(sp)return {it:{nm,b:"",area:sp[1]}};
+  let hits=EX.filter(([n])=>n===nm);if(!hits.length)hits=EX.filter(([n])=>n.includes(nm));
+  if(hits.length===1)return {it:{nm:hits[0][0],b:hits[0][1]}};
+  if(hits.length>1)return {err:`「${nm}」は${hits.length}件あります。候補から選ぶか、小間番号も入れてください。`};
+  return {err:`「${nm}」は出展社一覧に見つかりません。小間番号も入れてください。`};
+}
+
+// 時刻の割り振り：待ち・昼・移動は決まった長さ、ホールの枠は会社の数に応じて残りの時間を分ける（最低15分）
+function retime(s){
+  const close=DATES[s.date].close,end=Math.min(toM(s.end),close);
+  let t=toM(s.start);
+  const ws=s.plan.find(x=>x.kind==="wait");
+  if(ws&&t>=OPEN)s.plan=s.plan.filter(x=>x!==ws);
+  if(!s.plan.some(x=>x.kind==="wait")&&t<OPEN)s.plan.splice(s.plan[0]&&s.plan[0].kind==="seen"?1:0,0,{id:nid("s"),kind:"wait",name:"正面入場口で待つ",hall:"move",sub:"10:00に開場。来場者証を手元に。開いたら「スタート」を押す。",items:[]});
+  const begin=Math.max(t,OPEN);
+  let fixed=0;s.plan.forEach(x=>{if(x.kind==="lunch")fixed+=s.lunchMin;if(x.kind==="move")fixed+=x.dur});
+  const areas=s.plan.filter(x=>x.kind==="area");
+  const W=areas.reduce((a,x)=>a+Math.max(1,x.items.length),0)||1;
+  const avail=end-begin-fixed;
+  let used=0;areas.forEach(x=>{x.dur=Math.max(15,Math.floor(avail*Math.max(1,x.items.length)/W/5)*5);used+=x.dur});
+  if(areas.length&&used<avail)areas[areas.length-1].dur+=avail-used;
+  s.short=used>avail;
+  s.plan.forEach(x=>{
+    if(x.kind==="seen"||x.kind==="extra"){x.t="";x.e="";return}
+    if(x.kind==="wait"){x.t=fmt(t);x.e=fmt(OPEN);t=OPEN;return}
+    if(x.kind==="leave"){x.t=fmt(Math.max(t,end));x.e="";return}
+    const d=x.kind==="lunch"?s.lunchMin:x.dur;
+    x.t=fmt(t);x.e=fmt(t+d);t+=d;
+  });
+  const lv=s.plan.find(x=>x.kind==="leave");if(lv)lv.sub=`閉場は${fmt(close).replace(/^0/,"")}。`;
+}
+// 回る順番：正面入場口か、実際に入ったホールから、移動の近い順にたどる（★は各ホールの中で先に）
+const BLDA={};ROUTE.forEach(a=>{(BLDA[AREAS[a].hall]=BLDA[AREAS[a].hall]||[]).push(a)});
+const travel=(a,b)=>a===b?0:a==="ent"?ENTMIN[b]:b==="ent"?ENTMIN[a]:transitPlan(a,b).min;
+function moveSub(a,b){const A=AREAS[b],j=ROUTE.indexOf(b);
+  if(a==="ent")return j===2||j===3?`正面入場口を入ってすぐ、${j===2?"左":"右"}手が${A.name}の入口。`:`正面入場口から中央通路を${j<2?"左（A棟側）":"右（C棟側）"}へ進み、${A.name}へ。`;
+  return routeText(a,b)}
+function orderAreas(has,from,startArea){
+  const rem=new Set(has),out=[];let loc="ent";
+  const pick=()=>{let best=null;rem.forEach(a=>{if(best===null||travel(loc,a)<travel(loc,best)||(travel(loc,a)===travel(loc,best)&&ROUTE.indexOf(a)<ROUTE.indexOf(best)))best=a});return best};
+  if(startArea){loc=startArea;if(rem.has(startArea)){out.push(startArea);rem.delete(startArea)}}
+  else if(BLDA[from]){const c=BLDA[from].filter(a=>rem.has(a)).sort((x,y)=>ENTMIN[x]-ENTMIN[y])[0];if(c){out.push(c);rem.delete(c);loc=c}}
+  else{}
+  while(rem.size){if(!out.length&&loc==="ent"){const a=pick();out.push(a);rem.delete(a);loc=a;continue}const a=pick();out.push(a);rem.delete(a);loc=a}
+  return out}
+function buildCore(s,picks,opt){
+  const g={};picks.forEach(p=>{const a=areaOf(p);(g[a]=g[a]||[]).push(p)});
+  const inc=orderAreas(Object.keys(g).filter(a=>ROUTE.includes(a)),s.from,opt.startArea);
+  const plan=[];
+  if(opt.seen&&opt.seen.length)plan.push({id:nid("s"),kind:"seen",name:"見た会社",hall:"move",sub:"",items:opt.seen});
+  let prev=opt.startArea||"ent";
+  inc.forEach(a=>{
+    const m=travel(prev,a);
+    if(prev!==a&&m>=5)plan.push({id:nid("s"),kind:"move",name:prev==="ent"?`入場口から${AREAS[a].name}へ（目安${m}分）`:`移動（目安${m}分）`,hall:"move",dur:m,sub:moveSub(prev,a),items:[]});
+    const items=g[a].slice().sort((x,y)=>(y.st-x.st)||(x.b||"~").localeCompare(y.b||"~"));
+    plan.push({id:nid("s"),kind:"area",area:a,...AREAS[a],items,sub:items.some(i=>i.st)?"先に★の会社を見てから、ほかを回る。":""});
+    prev=a;
+  });
+  plan.push({id:nid("s"),kind:"leave",name:"会場を出る",hall:"move",items:[]});
+  s.plan=plan;retime(s);
+  const endM=Math.min(toM(s.end),DATES[s.date].close);
+  if(s.lunchMin>0&&toM(s.lunch)<endM&&toM(s.lunch)+s.lunchMin>toM(s.start)&&!opt.noLunch){
+    let idx=s.plan.findIndex(x=>x.kind==="area"&&toM(x.t)>=toM(s.lunch)-15);
+    if(idx<0)idx=s.plan.findIndex(x=>x.kind==="leave");
+    if(idx>0&&s.plan[idx-1].kind==="move")idx--;
+    s.plan.splice(Math.max(idx,0),0,{id:nid("s"),kind:"lunch",name:"昼食",hall:"move",sub:LUNCH_SUB,items:[]});
+    retime(s);
+  }
+}
+// 時間が足りないときは★だけで時間割を組み、★以外は最後の「時間があれば」枠へ（近い順）
+function build(s,picks,opt){opt=opt||{};
+  buildCore(s,picks,opt);
+  const stars=picks.filter(p=>p.st),rest=picks.filter(p=>!p.st);
+  if(!s.short||!stars.length||!rest.length)return;
+  buildCore(s,stars,opt);
+  const last=[...s.plan].reverse().find(x=>x.kind==="area"),ord=orderAreas([...new Set(rest.map(areaOf))].filter(a=>ROUTE.includes(a)),s.from,last?last.area:opt.startArea);
+  const ex=rest.filter(p=>!ROUTE.includes(areaOf(p))).concat(...ord.map(a=>rest.filter(p=>areaOf(p)===a)));
+  const li=s.plan.findIndex(x=>x.kind==="leave");
+  s.plan.splice(li,0,{id:nid("s"),kind:"extra",name:"時間があれば（★のあと、近い順）",hall:"move",sub:"★を見終わって時間が残ったら、上から順に。",items:ex});
+  retime(s)}
+const allItems=s=>s.plan.flatMap(x=>x.items);
+
+// バックアップ：予定をテキストにして、LINEのKeepメモなどに残せるようにする
+const b64e=u=>{let t="";for(let i=0;i<u.length;i+=8192)t+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(t)};
+const b64d=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+async function pipe(bytes,Stream){const r=new Blob([bytes]).stream().pipeThrough(new Stream("deflate-raw"));return new Uint8Array(await new Response(r).arrayBuffer())}
+async function encodeBk(){
+  const raw=new TextEncoder().encode(JSON.stringify({v:1,list:db.list,gates:db.gates||{},draft:db.draft||null}));
+  let body;try{if(typeof CompressionStream==="function")body="NV1z:"+b64e(await pipe(raw,CompressionStream))}catch(e){}
+  if(!body)body="NV1j:"+b64e(raw);
+  return `【展示会ナビの予定のバックアップ】\n予定づくりアプリの「バックアップを読み込む」に、この文をまるごと貼り付けると予定が戻ります。\n${body}\n（ここまで）`;
+}
+async function decodeBk(text){
+  const m=String(text).replace(/\s+/g,"").match(/NV1([zj]):([A-Za-z0-9+/]+=*)/);
+  if(!m)throw new Error("バックアップの文が見つかりません。「NV1」で始まる部分まで全部貼り付けてください。");
+  let bytes=b64d(m[2]);
+  if(m[1]==="z"){if(typeof DecompressionStream!=="function")throw new Error("このブラウザでは読み込めません。Safari か Chrome で開いてください。");bytes=await pipe(bytes,DecompressionStream)}
+  const o=JSON.parse(new TextDecoder().decode(bytes));
+  if(!o||!Array.isArray(o.list))throw new Error("中身が予定の形になっていません。");
+  if(o.gates&&typeof o.gates==="object")db.gates=Object.assign(db.gates||{},o.gates);
+  if(o.draft&&Array.isArray(o.draft.picks)&&o.draft.picks.length&&!(db.draft&&db.draft.picks&&db.draft.picks.length))db.draft=o.draft;
+  return o.list.filter(x=>x&&x.id&&Array.isArray(x.plan)&&DATES[x.date]);
+}
+function exportBk(){encodeBk().then(t=>{bk={mode:"out",text:t,msg:"",ng:false};db.bk=Date.now();store();render();
+  const ta=document.getElementById("bk-out");if(ta)ta.scrollIntoView({block:"center"})})}
+let bk={mode:"",text:"",msg:"",ng:false};
+function bkHTML(){
+  const stale=db.list.length&&(db.mod||0)>(db.bk||0);
+  return `<h2>バックアップ</h2><div class="note bk ${stale?"stale":""}">
+    <p style="margin:0">${stale?"<b>前回のバックアップのあとに変更があります。</b>":"予定は今バックアップ済みです。"}「書き出す」で出る文を、LINEの自分あてのトークやKeepメモに貼っておくと、ブラウザが変わっても予定を戻せます。</p>
+    <div class="row">${db.list.length?`<button type="button" class="go" data-act="bkout">書き出す</button>`:""}<button type="button" data-act="bkin">バックアップを読み込む</button></div>
+    ${bk.mode==="out"?`<textarea id="bk-out" readonly>${esc(bk.text)}</textarea><div class="row"><button type="button" class="go" data-act="bkcopy">この文をコピー</button></div>`:""}
+    ${bk.mode==="in"?`<textarea id="bk-in" placeholder="ここにバックアップの文を貼り付け"></textarea><div class="row"><button type="button" class="go" data-act="bkload">読み込む</button></div>`:""}
+    <p class="msg ${bk.ng?"ng":""}" id="bk-msg">${esc(bk.msg)}</p></div>`;
+}
+
+// 会場地図：架空の会場の小間割図（maps/*.svg）。座標は図と同じ単位（1px=32）
+const FA=Object.fromEntries(Object.entries(AF).map(([a,f])=>[f,a]));
+const fileOfB=b=>AF[PREF[(b||"").slice(0,2).toUpperCase()]]||"";
+function boothPos(b){if(!b)return null;b=b.toUpperCase();const h=fileOfB(b);if(!h)return null;const d=BOOTH[h];
+  let v=d[b];if(!v){const base=b.replace(/-\d+$/,"");v=d[base]||d[Object.keys(d).find(k=>k.startsWith(base+"-"))]}
+  return v?{h,b,lat:v[0],lng:v[1]}:null}
+const namesOf=b=>{const n=EX.filter(x=>x[1]===b).map(x=>x[0]);return n.length?n.slice(0,2).join("・")+(n.length>2?` ほか${n.length-2}社`:""):""};
+function inPoly(y,x,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const [yi,xi]=P[i],[yj,xj]=P[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
+function boothAt(h,lat,lng){const d=BOOTH[h];for(const k in d)if(inPoly(lat,lng,d[k][2]))return k;return ""}
+function routeText(fa,ta){const i=ROUTE.indexOf(fa),j=ROUTE.indexOf(ta);if(i<0||j<0||i===j)return "";
+  const lo=Math.min(i,j),hi=Math.max(i,j);let segs=SEG.slice(lo,hi);if(i>j)segs=segs.slice().reverse();
+  return `目安${segs.reduce((a,x)=>a+x.m,0)}分。`+segs.map(x=>x.sub).join("。")+"。"}
+// 次の行き先：今いる小間が予定にあれば、その次のまだ見ていない小間。予定外（寄り道）なら、予定の中でまだ見ていない最初の小間
+function nextOf(s,pos){
+  const seq=allItems(s),open=it=>!s.done[it.id];
+  if(pos&&pos.nextId&&!pos.b){const k=seq.find(it=>it.id===pos.nextId);if(k&&open(k))return k}
+  const i=pos&&pos.b?seq.findIndex(it=>(it.b||"").toUpperCase()===pos.b):-1;
+  if(i>=0)return seq.slice(i+1).find(open)||seq.slice(0,i).find(open)||null;
+  return seq.find(open)||null}
+let LM=null,mapHall="",mapLayers=null;
+function killMap(){if(LM){LM.remove();LM=null;mapLayers=null}}
+function renderMap(){
+  const s=cur;setHead(s.name,"会場地図　タップした場所が現在地");
+  killMap();
+  const nx=nextOf(s,s.pos);
+  mapHall=(s.pos&&s.pos.h)||(nx&&(boothPos(nx.b)?.h||AF[areaOf(nx)]))||AF[ROUTE[0]];
+  V.innerHTML=`<nav class="htabs" id="htabs">${ROUTE.map(a=>{const f=AF[a],n=allItems(s).filter(it=>AF[areaOf(it)]===f&&!s.done[it.id]).length;
+      return `<button type="button" data-mact="hall" data-h="${f}" style="--hc:var(--${AREAS[a].hall})">${AREAS[a].name.replace("ホール","")}${n?`<i>${n}</i>`:""}</button>`}).join("")}</nav>
+    <div class="mpanel" id="mpanel"></div>
+    <div id="tview" class="tview" hidden></div>
+    <div id="jmap" role="application" aria-label="会場地図"></div>
+    <p class="mnote mapnote">番号の丸＝予定の会社（★は大きい丸）。地図の小間をタップすると、そこを現在地にして、次に行く小間まで線を引きます。線は直線なので、通路に沿って進んでください。地図は架空の会場の小間割図です。</p>
+    <div class="pact"><button type="button" data-act="toplan">時刻表に戻る</button></div>`;
+  const crs=L.extend({},L.CRS.Simple,{transformation:new L.Transformation(1,0,-1,0),scale:z=>Math.pow(2,z)/256,zoom:sc=>Math.log(sc*256)/Math.LN2,infinite:false});
+  LM=L.map("jmap",{crs,minZoom:-1,maxZoom:4.5,zoomSnap:.25,zoomDelta:.5,attributionControl:false});
+  mapLayers=L.layerGroup().addTo(LM);
+  LM.on("click",e=>{const lat=e.latlng.lat,lng=e.latlng.lng;
+    if(fixGate){const k=fixGate.slice(3),en=fixGate.startsWith("en:");db.gates=db.gates||{};db.gates[k]=[Math.round(lat),Math.round(lng)];fixGate="";
+      if(en&&cur.pos&&cur.pos.gate&&cur.pos.h===mapHall){cur.pos.lat=Math.round(lat);cur.pos.lng=Math.round(lng)}save();return drawMap(true)}
+    const b=boothAt(mapHall,lat,lng);
+    if(faceMode){if(b){const q=boothPos(b);return setFace(q.lat,q.lng)}return setFace(lat,lng)}
+    if(b){const p=boothPos(b);setPos({h:mapHall,b,lat:p.lat,lng:p.lng})}else setPos({h:mapHall,b:"",lat,lng})});
+  showHall(mapHall,true);
+  if((s.pos&&s.pos.transit&&transit(s.pos,nextOf(s,s.pos)))||(!s.pos&&s.entNav&&s.started))setTransit(true);
+}
+function setPos(p){fixGate="";faceMode=false;const o=cur.pos;if(!p.b&&o&&o.nextId)p.nextId=o.nextId;
+  if(o&&o.h===p.h&&(o.lat!==p.lat||o.lng!==p.lng)){p.dir=[p.lat-o.lat,p.lng-o.lng];p.dirSrc="walk"}
+  cur.pos=p;save();drawMap(true)}
+function setFace(lat,lng){faceMode=false;const p=cur.pos;if(!p)return;p.dir=[lat-p.lat,lng-p.lng];p.dirSrc="face";save();drawMap(false)}
+function showHall(h,fit){mapHall=h;
+  document.querySelectorAll("#htabs button").forEach(b=>b.classList.toggle("on",b.dataset.h===h));
+  const [w,ht]=HALLMAP[h],bounds=[[-ht*32,0],[0,w*32]];
+  if(LM._img)LM.removeLayer(LM._img);
+  LM._img=L.imageOverlay("maps/"+h+".svg",bounds,{interactive:false}).addTo(LM);LM._img.bringToBack();
+  LM.setMaxBounds(L.latLngBounds(bounds).pad(.15));
+  if(fit)LM.fitBounds(bounds);
+  drawMap(fit);
+  const t=document.querySelector(`#htabs button[data-h="${h}"]`);if(t)t.scrollIntoView({inline:"center",block:"nearest"});
+}
+// ホール間の出入口（目安の位置。どの出口がどこへ通じるかは、現地で直せる）
+let fixGate="",faceMode=false,lastFrom=null,lastTo=null;
+// 向き：正面の小間（または歩いてきた方向）と、次の目標の方向の角度差を言葉と矢印に
+function turnOf(dir,from,to){const fx=dir[1],fy=dir[0],tx=to[1]-from[1],ty=to[0]-from[0];
+  if(!(fx||fy)||!(tx||ty))return null;
+  const d=Math.atan2(fx*ty-fy*tx,fx*tx+fy*ty)*180/Math.PI,a=Math.abs(d),side=d>0?"左":"右";
+  const w=a<=22.5?"まっすぐ前へ":a<=67.5?`${side}ななめ前へ`:a<=112.5?`${side}へ曲がる`:a<=157.5?`${side}ななめ後ろへ`:"振り返って後ろへ";
+  return {d,w}}
+const dist2=(a,b)=>(a[0]-b[0])**2+(a[1]-b[1])**2;
+// 経路上の隣のエリア：fromからtoへ向かうときに次に入るエリア、toに入る直前のエリア
+function nbToward(fa,ta){const i=ROUTE.indexOf(fa),j=ROUTE.indexOf(ta);return ROUTE[i+(j>i?1:-1)]}
+function nbFrom(fa,ta){const i=ROUTE.indexOf(fa),j=ROUTE.indexOf(ta);return ROUTE[j+(j>i?-1:1)]}
+function gatePt(h,nb,near){const k=h+">"+nb,o=db.gates&&db.gates[k];if(o)return {k,ll:o,fixed:true};
+  const L=(GATES[h]||{})[nb]||[];if(!L.length)return null;let best=L[0];if(near)L.forEach(g=>{if(dist2(g,near)<dist2(best,near))best=g});return {k,ll:best,fixed:false}}
+// ホールをまたぐときの出口（今のホール側）と入口（次のホール側）
+function transit(pos,nx){if(!pos||!nx)return null;const np=boothPos(nx.b),nh=np?np.h:AF[areaOf(nx)];if(!nh||nh===pos.h)return null;
+  const fa=FA[pos.h],ta=FA[nh];
+  return {nh,ex:gatePt(pos.h,nbToward(fa,ta),[pos.lat,pos.lng]),en:gatePt(nh,nbFrom(fa,ta),np?[np.lat,np.lng]:null),np}}
+const gateIcon=t=>L.divIcon({className:"",html:`<div class="gate">${t}</div>`,iconSize:[44,24],iconAnchor:[22,12]});
+function drawMap(focus){
+  const s=cur,pos=s.pos,nx=nextOf(s,pos);mapLayers.clearLayers();
+  const seq=allItems(s);let pinFor=null;
+  seq.forEach((it,k)=>{const p=boothPos(it.b);if(!p||p.h!==mapHall)return;
+    const area=FA[p.h],cls=["pin",it.st?"st":"",s.done[it.id]?"dn":"",nx&&nx.id===it.id?"nx":""].join(" ");
+    const m=L.marker([p.lat,p.lng],{icon:L.divIcon({className:"",html:`<div class="${cls}" style="--pc:var(--${it.st?"accent":AREAS[area].hall})">${k+1}</div>`,iconSize:[30,30],iconAnchor:[15,15]}),zIndexOffset:nx&&nx.id===it.id?500:0}).addTo(mapLayers);
+    m.on("click",()=>faceMode?setFace(p.lat,p.lng):setPos({h:p.h,b:p.b,lat:p.lat,lng:p.lng}));
+    if(nx&&nx.id===it.id)pinFor=p});
+  const tr=transit(pos,nx);let from=null,to=null;
+  if(pos&&pos.h===mapHall){from=[pos.lat,pos.lng];L.marker(from,{icon:L.divIcon({className:"",html:'<div class="me"></div>',iconSize:[20,20],iconAnchor:[10,10]}),interactive:false,zIndexOffset:1000}).addTo(mapLayers);
+    if(tr){if(tr.ex){to=tr.ex.ll;L.marker(to,{icon:gateIcon("出口"),interactive:false,zIndexOffset:800}).addTo(mapLayers)}}
+    else if(pinFor)to=[pinFor.lat,pinFor.lng]}
+  else if(tr&&tr.nh===mapHall&&tr.en){from=tr.en.ll;L.marker(from,{icon:gateIcon("入口"),interactive:false,zIndexOffset:800}).addTo(mapLayers);if(pinFor)to=[pinFor.lat,pinFor.lng]}
+  lastFrom=pos&&pos.h===mapHall?[pos.lat,pos.lng]:null;lastTo=lastFrom?to:null;
+  if(lastFrom&&pos.dir){const n=Math.hypot(pos.dir[0],pos.dir[1])||1,len=2600;
+    L.polyline([lastFrom,[pos.lat+pos.dir[0]/n*len,pos.lng+pos.dir[1]/n*len]],{color:"#1a73e8",weight:4,opacity:.8,interactive:false}).addTo(mapLayers)}
+  if(from&&to){L.polyline([from,to],{color:"#d9480f",weight:5,opacity:.9,dashArray:"10 8",interactive:false}).addTo(mapLayers);
+    if(focus)LM.fitBounds(L.latLngBounds([from,to]).pad(.6),{maxZoom:3})}
+  else if(focus&&from)LM.setView(from,Math.max(LM.getZoom(),1.5));
+  else if(focus&&pinFor)LM.setView([pinFor.lat,pinFor.lng],Math.max(LM.getZoom(),1.5));
+  drawPanel(pos,nx,tr);
+}
+function drawPanel(pos,nx,tr){
+  const s=cur,el=document.getElementById("mpanel");if(!el)return;
+  const nh=nx?(boothPos(nx.b)?.h||AF[areaOf(nx)]):"",ph=pos&&pos.h;
+  const curIt=pos&&pos.b?allItems(s).find(it=>(it.b||"").toUpperCase()===pos.b):null;
+  const hallName=h=>AREAS[FA[h]]?.name||"";
+  const here=pos?(pos.b?`<b>${esc(curIt?curIt.nm:(namesOf(pos.b)||"小間"))}</b><span class="bn">${esc(pos.b)}</span>${curIt?"":`<small>予定にない小間（寄り道）</small>`}`
+      :`<b>${pos.gate?"ホールの入口":"地図で選んだ場所"}</b><small>${esc(hallName(ph))}</small>`)
+    :`<b>まだありません</b><small>${nh?`${esc(hallName(nh))}の入口に着いたら、下のオレンジのボタンを押してください。そこから次の小間まで案内します。<br>入場口からの道順：${esc(moveSub("ent",FA[nh]))}`:"地図の今いる小間をタップしてください。"}</small>`;
+  let next;
+  if(!nx)next=`<b>予定の会社はすべて見ました</b>`;
+  else{const p=boothPos(nx.b);
+    next=`<b>${nx.st?"★ ":""}${esc(nx.nm)}</b>${nx.b?`<span class="bn">${esc(nx.b)}</span>`:""}<small>${esc(hallName(nh))}${p?"":"（地図に位置がない企画です）"}</small>`}
+  let steps="";
+  if(tr&&ph===mapHall)steps=`<div class="mrow"><span>移動</span><div><b>①出口へ → ②${esc(hallName(tr.nh))}へ</b><small>${esc(routeText(FA[ph],FA[tr.nh]))}</small>
+      <small>出口の位置は目安です${tr.ex&&tr.ex.fixed?"（直した位置）":""}。違っていたら「出口を直す」で正しい出口をタップしてください。</small></div></div>`;
+  else if(tr&&tr.nh===mapHall)steps=`<div class="mrow"><span>移動</span><div><small>入口から次の小間まで線を引いています。入口の位置は目安です${tr.en&&tr.en.fixed?"（直した位置）":""}。</small></div></div>`;
+  let face="";
+  if(pos&&pos.h===mapHall){const t=pos.dir&&lastTo?turnOf(pos.dir,lastFrom,lastTo):null;
+    if(t)face=`<div class="turn"><div class="tarrow" style="transform:rotate(${(-t.d).toFixed(0)}deg)" aria-hidden="true">↑</div>
+      <div><b>${t.w}</b><small>${pos.dirSrc==="face"?"正面の小間で合わせた向き":"歩いてきた方向から推定した向き"}が基準です。青い線が今の正面です。</small></div></div>`;
+    else if(!pos.dir)face=`<p class="fixnote" style="color:var(--muted);font-weight:500">「向きを合わせる」で正面の小間をタップすると、進む方向を矢印で出します。</p>`}
+  el.innerHTML=`${face}<div class="mrow"><span>現在地</span><div>${here}</div></div>
+    <div class="mrow"><span>次へ</span><div>${next}</div></div>${steps}
+    ${faceMode?`<p class="fixnote">今向いている先（正面）の小間をタップしてください。</p>`:""}
+    ${fixGate?`<p class="fixnote">地図で正しい${fixGate.startsWith("en:")?"入口":"出口"}の場所をタップしてください。</p>`:""}
+    ${!pos&&nh?`<button type="button" class="entnav" data-mact="tmap">入場口から${esc(hallName(nh))}への道順（会場マップ）</button><button type="button" class="arrive" data-mact="arrive" data-h="${nh}">${esc(hallName(nh))}の入口に着いた（ここから案内）</button>`:""}
+    ${pos&&tr&&pos.h!==mapHall&&tr.nh===mapHall?`<button type="button" class="arrive" data-mact="moved">${esc(hallName(mapHall))}の入口に着いた（ここから案内）</button>`:""}
+    <div class="mbtns">${pos&&pos.h===mapHall?`<button type="button" class="${pos.dir?"":"go"}" data-mact="face">${faceMode?"向き合わせをやめる":"向きを合わせる"}</button>`:""}${curIt&&!s.done[curIt.id]?`<button type="button" class="go" data-mact="seen" data-it="${curIt.id}">ここを見た（チェック）</button>`:""}
+      ${tr&&ph===mapHall?`<button type="button" class="go" data-mact="tmap">出口に着いた（移動マップへ）</button><button type="button" data-mact="moved">${esc(hallName(tr.nh))}に着いた</button>`:""}
+      ${tr&&ph===mapHall&&tr.ex?`<button type="button" data-mact="fix" data-k="ex:${tr.ex.k}">${fixGate?"直すのをやめる":"出口を直す"}</button>`:""}
+      ${tr&&tr.nh===mapHall&&tr.en?`<button type="button" data-mact="fix" data-k="en:${tr.en.k}">${fixGate?"直すのをやめる":"入口を直す"}</button>`:""}
+      ${pos&&pos.gate&&pos.h===mapHall&&pos.gk?`<button type="button" data-mact="fix" data-k="en:${pos.gk}">${fixGate?"直すのをやめる":"入口を直す"}</button>`:""}
+      ${nh&&nh!==mapHall&&!(tr&&ph===mapHall)?`<button type="button" data-mact="hall" data-h="${nh}">${esc(hallName(nh))}の地図へ</button>`:""}
+      ${pos&&pos.h!==mapHall?`<button type="button" data-mact="hall" data-h="${pos.h}">現在地のホールへ</button>`:""}
+      ${pos?`<button type="button" data-mact="clear">現在地を消す</button>`:""}</div>
+    <form class="mfind add" id="mfind"><div class="mnum">${boothBox("mf-num",pfxOfHall(mapHall)||curPfx(),"目の前の小間の数字")}<button type="submit">現在地にする</button></div>
+      <input id="mf-in" placeholder="または会社名（読みでも探せます）" autocomplete="off" data-act="aname"><div class="sugg" hidden></div>
+      <button type="button" class="pickbtn" data-pk="open">頭文字から選ぶ</button></form>
+    <p class="ahint" id="mf-hint"></p>`;
+}
+// 移動マップ：会場の案内図をもとにした簡易図。ルートと時間は目安
+function transitPlan(fa,ta){const i=ROUTE.indexOf(fa),j=ROUTE.indexOf(ta),lo=Math.min(i,j),hi=Math.max(i,j);
+  let segs=SEG.slice(lo,hi);if(i>j)segs=segs.slice().reverse();
+  const nm=a=>AREAS[a].name;
+  return {st:[`${nm(fa)}を出る`,...segs.map(x=>x.sub),`${nm(ta)}の入口へ`],min:segs.reduce((a,x)=>a+x.m,0)}}
+// 会場全体図（maps/site.svg）の上に道順を重ねる。座標は図のピクセル。経路は中央通路（y=CY）に沿って進む
+const SITE=VENUE.site,ENTPT=SITE.entpt,HP=SITE.hp,CY=SITE.conc;
+function routeSegs(fa,ta){
+  if(ta==="ent")return routeSegs("ent",fa).map(x=>({p:x.p.slice().reverse(),d:x.d})).reverse();
+  const a=fa==="ent"?ENTPT:HP[fa],b=HP[ta],p=[a,[a[0],CY],[b[0],CY],b].filter((q,i,A)=>!i||q[0]!==A[i-1][0]||q[1]!==A[i-1][1]);
+  return [{p}]}
+let siteFull=false;
+function siteSVG(fa,ta){const segs=routeSegs(fa,ta),pts=segs.flatMap(x=>x.p);
+  let x0=Math.min(...pts.map(q=>q[0]))-50,x1=Math.max(...pts.map(q=>q[0]))+50,y0=Math.min(...pts.map(q=>q[1]))-50,y1=Math.max(...pts.map(q=>q[1]))+50;
+  const mw=340,mh=300;if(x1-x0<mw){const c=(x0+x1)/2;x0=c-mw/2;x1=c+mw/2}if(y1-y0<mh){const c=(y0+y1)/2;y0=c-mh/2;y1=c+mh/2}
+  if(siteFull){x0=0;y0=0;x1=SITE.w;y1=SITE.h}
+  x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(SITE.w,x1);y1=Math.min(SITE.h,y1);
+  const w=x1-x0,h=y1-y0,r=Math.max(6,w/40),pl=a=>a.map(q=>q.join(",")).join(" ");
+  const st=pts[0],en=pts[pts.length-1];
+  const esc1=segs.filter(x=>x.d).map(x=>{const m=x.p[0],n=x.p[x.p.length-1];return `<text x="${(m[0]+n[0])/2+r}" y="${(m[1]+n[1])/2}" class="sm-t" font-size="${r*1.6}">エスカレーター</text>`}).join("");
+  return `<div class="sitewrap"><svg viewBox="${x0} ${y0} ${w} ${h}" class="sitemap" role="img" aria-label="会場マップの道順">
+    <image href="maps/site.svg" x="0" y="0" width="${SITE.w}" height="${SITE.h}"/>
+    ${segs.map(x=>`<polyline points="${pl(x.p)}" class="${x.d?"sm-esc":"sm-hi"}" vector-effect="non-scaling-stroke"/>`).join("")}${esc1}
+    <circle cx="${st[0]}" cy="${st[1]}" r="${r}" class="tw-from"/><circle cx="${en[0]}" cy="${en[1]}" r="${r}" class="tw-to"/>
+  </svg></div>
+  <div class="mbtns"><button type="button" data-mact="sitefull">${siteFull?"道順の部分を大きく":"会場全体を見る"}</button></div>`}
+function entPlan(ta){const nm=AREAS[ta].name,j=ROUTE.indexOf(ta),st=["正面入場口（B棟の中央）から中央通路へ"];
+  if(j===2||j===3)st.push(`${nm}の入口はすぐ目の前（${j===2?"左":"右"}手）`);
+  else{st.push(`中央通路を${j<2?"左（A棟側）":"右（C棟側）"}へ進む`);
+    (j<2?SEG.slice(j,2).reverse():SEG.slice(3,j)).forEach(x=>st.push(x.sub));st.push(`${nm}の入口へ`)}
+  return {st,min:ENTMIN[ta]}}
+function drawTransit(){
+  const s=cur,pos=s.pos,nx=nextOf(s,pos),tr=transit(pos,nx),el=document.getElementById("tview");if(!el)return;
+  const nh=nextHall(s,pos);
+  if(!pos&&!nh){el.innerHTML=`<p class="mnote">次の行き先がありません。</p>`;return}
+  if(pos&&!tr){el.innerHTML=`<p class="mnote">ホールをまたぐ移動はありません。</p><div class="mbtns"><button type="button" data-mact="tback">ホールの地図に戻る</button></div>`;return}
+  const fa=pos?FA[pos.h]:"ent",ta=FA[pos?tr.nh:nh],plan=fa==="ent"?entPlan(ta):transitPlan(fa,ta);
+  el.innerHTML=`<div class="tw-head"><b>${fa==="ent"?"正面入場口":esc(AREAS[fa].name)}</b> → <b>${esc(AREAS[ta].name)}</b><span>目安${plan.min}分</span></div>
+    ${siteSVG(fa,ta)}
+    <ol class="tw-steps">${plan.st.map(t=>`<li>${esc(t)}</li>`).join("")}</ol>
+    <div class="mbtns">${fa==="ent"?`<button type="button" class="go" data-mact="arrive" data-h="${AF[ta]}">${esc(AREAS[ta].name)}の入口に着いた（ここから案内）</button>`
+      :`<button type="button" class="go" data-mact="moved">${esc(AREAS[ta].name)}に着いた（入口から案内）</button>`}
+      <button type="button" data-mact="tback">ホールの地図に戻る</button></div>
+    <p class="mnote">地図は架空の会場の簡易図です。オレンジの線（道順）は目安なので、現地の案内サインも確認してください。青＝出発、赤＝行き先。</p>`}
+function setTransit(on){const t=document.getElementById("tview"),m=document.getElementById("jmap");if(!t||!m)return;
+  if(cur.pos)cur.pos.transit=on;else cur.entNav=on;save();t.hidden=!on;m.hidden=on;document.getElementById("mpanel").hidden=on;
+  document.querySelector(".mnote.mapnote").hidden=on;if(on){drawTransit();window.scrollTo(0,0)}else{LM.invalidateSize();drawMap(true)}}
+// ホールの入口に着いた：入場口側の入口を現在地にして、そこから次の小間まで案内
+function nextHall(s,pos){const nx=nextOf(s,pos);return nx?(boothPos(nx.b)?.h||AF[areaOf(nx)]):""}
+function arriveAt(h){const s=cur,nx=nextOf(s,s.pos&&s.pos.h===h?s.pos:null)||nextOf(s,null),np=nx?boothPos(nx.b):null;
+  const g=gatePt(h,ENTGATE[FA[h]],np&&np.h===h?[np.lat,np.lng]:null);
+  const ai=s.plan.findIndex(x=>x.kind==="area"&&AF[x.area]===h);
+  for(let i=ai-1;i>=0&&(s.plan[i].kind==="move"||s.plan[i].kind==="lunch"||s.plan[i].kind==="wait");i--)if(s.plan[i].kind==="move")s.done[s.plan[i].id]=true;
+  s.pos=g?{h,b:"",lat:g.ll[0],lng:g.ll[1],gate:true,gk:g.k,nextId:nx?nx.id:undefined}:null;
+  cur.entNav=false;fixGate="";faceMode=false;save();if(LM){const t=document.getElementById("tview");if(t&&!t.hidden)setTransit(false);showHall(h,false);drawMap(true)}}
+// 移動した：予定の「移動」枠にチェックを入れ、次のホールの入口を現在地にする
+function doMoved(){const s=cur,pos=s.pos,nx=nextOf(s,pos),tr=transit(pos,nx);if(!tr)return;
+  const ai=s.plan.findIndex(x=>x.kind==="area"&&AF[x.area]===tr.nh);
+  for(let i=ai-1;i>=0&&(s.plan[i].kind==="move"||s.plan[i].kind==="lunch");i--)if(s.plan[i].kind==="move")s.done[s.plan[i].id]=true;
+  const en=tr.en?tr.en.ll:(tr.np?[tr.np.lat,tr.np.lng]:null);
+  s.pos=en?{h:tr.nh,b:"",lat:en[0],lng:en[1],gate:true,gk:tr.en.k,nextId:nx.id}:{h:tr.nh,b:"",lat:0,lng:0,gate:true,nextId:nx.id};
+  save();fixGate="";showHall(tr.nh,false);drawMap(true)}
+document.addEventListener("click",e=>{const b=e.target.closest("button[data-mact]");if(!b||view!=="map")return;
+  const a=b.dataset.mact;
+  if(a==="hall"){const t=document.getElementById("tview");if(t&&!t.hidden)setTransit(false);return showHall(b.dataset.h,true)}
+  if(a==="seen"){cur.done[b.dataset.it]=true;save();return drawMap(true)}
+  if(a==="clear"){delete cur.pos;fixGate="";save();return drawMap(false)}
+  if(a==="arrive")return arriveAt(b.dataset.h);
+  if(a==="moved"){if(cur.pos)cur.pos.transit=false;const t=document.getElementById("tview");if(t&&!t.hidden)setTransit(false);return doMoved()}
+  if(a==="tmap")return setTransit(true);
+  if(a==="sitefull"){siteFull=!siteFull;return drawTransit()}
+  if(a==="tback")return setTransit(false);
+  if(a==="face"){faceMode=!faceMode;fixGate="";return drawMap(false)}
+  if(a==="fix"){faceMode=false;fixGate=fixGate?"":b.dataset.k;return drawMap(false)}
+});
+document.addEventListener("submit",e=>{if(e.target.id!=="mfind")return;e.preventDefault();e.stopImmediatePropagation();
+  const nb=boothVal(document.getElementById("mf-num")),v=document.getElementById("mf-in").value.trim(),h=document.getElementById("mf-hint");
+  if(!nb&&!v){h.textContent="小間番号の数字か会社名を入れてください。";return}
+  if(nb){const d=BOOTH[fileOfB(nb)]||{};
+    if(!d[nb]&&!/-\d+$/.test(nb)){const alts=boothAlts(nb),sg=e.target.querySelector(".sugg");
+      if(alts.length===1){const q=boothPos(alts[0]);cur.pos={h:q.h,b:q.b,lat:q.lat,lng:q.lng};save();if(q.h!==mapHall)showHall(q.h,false);drawMap(true);return}
+      h.textContent=alts.length?`${nb} はありません。別の展示棟の小間ならこちら：`:`${nb} は見つかりません。数字を確かめてください。`;
+      if(alts.length&&sg){sg.innerHTML=alts.map(k=>`<button type="button" data-pk="co" data-n="${esc(namesOf(k)||k)}" data-b="${k}"><span>${esc(namesOf(k)||"小間")}</span><em>${k}　${esc(hallLabel(k))}</em></button>`).join("");sg.hidden=false}
+      return}}
+  const o=OPTS[v];let b=nb||(o&&o.b?o.b:"");
+  if(!b&&/^[A-Z][0-9]{4}(-\d+)?$/i.test(v))b=v.toUpperCase();
+  if(!b&&/^[0-9]{3,4}$/.test(v))b=(pfxOfHall(mapHall)||curPfx())+v;
+  if(!b){const r=lookup(v,"");if(r.err){h.textContent=r.err;return}b=r.it.b}
+  const p=boothPos(b);if(!p){h.textContent=`${b} は地図に位置がありません。地図を直接タップしてください。`;return}
+  cur.pos={h:p.h,b:p.b,lat:p.lat,lng:p.lng};save();if(p.h!==mapHall)showHall(p.h,false);drawMap(true);
+},true);
+
+// 会社選び：頭文字（行→文字）から開く一覧と、入力中の候補（読みでも一致）
+// 読み（EVENT.yomi）：社名 → [頭文字, ひらがなの読み]
+const KROWS=[["あ","あいうえお"],["か","かきくけこ"],["さ","さしすせそ"],["た","たちつてと"],["な","なにぬねの"],["は","はひふへほ"],["ま","まみむめも"],["や","やゆよ"],["ら","らりるれろ"],["わ","わをん"],["A–Z","ABCDEFGHIJKLMNOPQRSTUVWXYZ#"],["企画",""]];
+const hallLabel=b=>{const a=PREF[(b||"").slice(0,2)];return a?AREAS[a].name.replace("ホール",""):""};
+// 社名ごとに1行（同じ社名で小間が複数あれば並べる）
+const COS=(()=>{const m=new Map();EX.forEach(([n,b])=>{if(!m.has(n))m.set(n,{nm:n,bs:[]});m.get(n).bs.push(b)});
+  return [...m.values()].map(c=>({...c,ini:(YOMI[c.nm]||["#",c.nm.toLowerCase()])[0],y:(YOMI[c.nm]||["",c.nm.toLowerCase()])[1]})).sort((a,b)=>a.y.localeCompare(b.y,"ja"))})();
+const toHira=t=>t.normalize("NFKC").toLowerCase().replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+let pkBox=null,pkRow="",pkChar="";
+function pkOpen(box){pkBox=box;pkRow="";pkChar="";let el=document.getElementById("pk");
+  if(!el){el=document.createElement("div");el.id="pk";el.className="pk";document.body.appendChild(el)}
+  el.hidden=false;pkDraw()}
+function pkClose(){const el=document.getElementById("pk");if(el)el.hidden=true;pkBox=null}
+const pkHas=ch=>COS.some(c=>c.ini.includes(ch));
+function pkDraw(){const el=document.getElementById("pk");
+  const row=KROWS.find(r=>r[0]===pkRow);
+  let list="";
+  if(pkRow==="企画")list=SPECIALS.map(([n,a,pl])=>`<button type="button" data-pk="sp" data-n="${esc(n)}"><span>${esc(n)}</span><em>${esc(pl)}</em></button>`).join("");
+  else if(pkChar)list=COS.filter(c=>c.ini.includes(pkChar)).map(c=>c.bs.map(b=>`<button type="button" data-pk="co" data-n="${esc(c.nm)}" data-b="${esc(b)}"><span>${esc(c.nm)}</span><em>${esc(b)}　${esc(hallLabel(b))}</em></button>`).join("")).join("");
+  el.innerHTML=`<div class="pk-sheet" role="dialog" aria-modal="true" aria-label="会社を選ぶ">
+    <div class="pk-head"><strong>会社を選ぶ</strong><button type="button" data-pk="close">閉じる</button></div>
+    <div class="pk-rows">${KROWS.map(([k])=>`<button type="button" data-pk="row" data-r="${k}" class="${pkRow===k?"on":""}">${k}</button>`).join("")}</div>
+    ${row&&row[1]?`<div class="pk-chars">${[...row[1]].map(ch=>{const n=COS.filter(c=>c.ini.includes(ch)).length;
+      return `<button type="button" data-pk="ch" data-c="${ch}" class="${pkChar===ch?"on":""}" ${n?"":"disabled"}>${ch==="#"?"数字":ch}<small>${n||""}</small></button>`}).join("")}</div>`:""}
+    ${list?`<div class="pk-list">${list}</div>`:`<p class="pk-hint">${pkRow?"文字を選ぶと会社が出ます。":"社名の最初の音（行）を選んでください。漢字の社名は読みで分けています。"}</p>`}
+  </div>`;
+  const l=el.querySelector(".pk-list");if(l)l.scrollTop=0}
+function fillBox(box,nm,b,area){
+  if(box.id==="mfind"){const p=boothPos(b);const h=document.getElementById("mf-hint");
+    if(!p){if(h)h.textContent=`${nm} は地図に位置がありません。地図を直接タップしてください。`;return}
+    cur.pos={h:p.h,b:p.b,lat:p.lat,lng:p.lng};save();if(p.h!==mapHall)showHall(p.h,false);drawMap(true);return}
+  const i=box.querySelector("[data-act=aname]");i.value=nm;box.dataset.area=area||"";
+  setBooth(box,b);
+  const sg=box.querySelector(".sugg");if(sg)sg.hidden=true;
+  // 選んだらそのまま追加（★は追加後に一覧で付け外しできる）
+  const add=box.querySelector("button[data-act=padd]");if(add){add.click();return}
+  const f=box.closest("form.add[data-s]");if(f){f.requestSubmit?f.requestSubmit():f.dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));return}}
+// 小間番号欄に入れる：展示棟ボタンを合わせ、欄には数字だけ
+function setBooth(box,b){const inp=box.querySelector(".abooth"),pf=box.querySelector(".pfx");if(!inp)return;
+  const m=(b||"").toUpperCase().match(/^([A-Z])(.+)$/);
+  if(m&&pf){pf.dataset.pfx=m[1];pf.innerHTML=`<b>${m[1]}</b><small>${PFXN[m[1]]}</small>`;inp.value=m[2]}else inp.value=b||""}
+function suggest(el){const box=el.closest(".add"),sg=box&&box.querySelector(".sugg");if(!sg)return;
+  const q=el.value.trim();if(!q||OPTS[q]){sg.hidden=true;return}
+  const qh=toHira(q),qn=q.normalize("NFKC").toLowerCase(),up=q.toUpperCase();
+  const hits=[];
+  if(/^[A-Z][0-9]/i.test(q))EX.forEach(([n,b])=>{if(b.startsWith(up)&&hits.length<12)hits.push([n,b])});
+  COS.forEach(c=>{if(hits.length>=12)return;if(c.y.startsWith(qh)||toHira(c.nm).includes(qh)||c.nm.normalize("NFKC").toLowerCase().includes(qn))c.bs.forEach(b=>hits.length<12&&hits.push([c.nm,b]))});
+  SPECIALS.forEach(([n,a,pl])=>{if(hits.length<12&&n.includes(q))hits.push([n,"",a,pl])});
+  if(!hits.length){sg.hidden=true;return}
+  sg.innerHTML=hits.map(([n,b,a,pl])=>`<button type="button" data-pk="${b?"co":"sp"}" data-n="${esc(n)}" data-b="${esc(b)}"><span>${esc(n)}</span><em>${b?esc(b+"　"+hallLabel(b)):esc(pl)}</em></button>`).join("");sg.hidden=false}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-pk]");
+  if(!b){if(e.target.id==="pk")pkClose();return}
+  const a=b.dataset.pk;
+  if(a==="open")return pkOpen(b.closest(".add"));
+  if(a==="close")return pkClose();
+  if(a==="row"){pkRow=pkRow===b.dataset.r?"":b.dataset.r;pkChar="";
+    const r=KROWS.find(x=>x[0]===pkRow);if(r&&r[1]){const av=[...r[1]].filter(pkHas);if(av.length===1)pkChar=av[0]}return pkDraw()}
+  if(a==="ch"){pkChar=b.dataset.c;return pkDraw()}
+  const box=pkBox||b.closest(".add");if(!box)return;
+  if(a==="co"){pkClose();return fillBox(box,b.dataset.n,b.dataset.b,"")}
+  if(a==="sp"){pkClose();const sp=SPECIALS.find(x=>x[0]===b.dataset.n);return fillBox(box,sp[0],"",sp[1])}
+});
+document.addEventListener("input",e=>{if(e.target.dataset.act==="aname")suggest(e.target)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&pkBox)pkClose()});
+
+// 小間番号：展示棟の文字（A・B・C）を先に入れておき、数字だけ打てばよいようにする
+const PFX=VENUE.pfx.map(p=>p.k),PFXN=Object.fromEntries(VENUE.pfx.map(p=>[p.k,p.n]));
+const pfxOfHall=h=>h?h[0].toUpperCase():"";
+const curPfx=()=>db.pfx||PFX[0];
+const pfxBtn=p=>`<button type="button" class="pfx" data-pfx="${p}" aria-label="展示棟を切り替え（今は${PFXN[p]}）"><b>${p}</b><small>${PFXN[p]}</small></button>`;
+const boothBox=(id,p,ph)=>`<span class="bpf">${pfxBtn(p)}<input id="${id}" class="abooth" inputmode="numeric" autocomplete="off" placeholder="${ph||"数字"}"></span>`;
+function boothVal(inp){if(!inp)return "";const v=inp.value.trim().toUpperCase().replace(/\s+/g,"");if(!v)return "";
+  if(/^[0-9]/.test(v)){const b=inp.parentElement&&inp.parentElement.querySelector(".pfx");return (b?b.dataset.pfx:curPfx())+v}return v}
+// 数字が合う小間を全展示棟から探す（別の棟にいた時のため）
+function boothAlts(b){const d=b.replace(/^[A-Z]+/,"");const out=[];for(const h in BOOTH)for(const k in BOOTH[h])if(k.replace(/^[A-Z]+/,"")===d)out.push(k);return out}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-pfx]");if(!b)return;
+  const n=PFX[(PFX.indexOf(b.dataset.pfx)+1)%PFX.length];b.dataset.pfx=n;b.innerHTML=`<b>${n}</b><small>${PFXN[n]}</small>`;b.setAttribute("aria-label",`展示棟を切り替え（今は${PFXN[n]}）`);
+  db.pfx=n;store();const i=b.parentElement.querySelector("input");if(i)i.focus()});
+
+// 未バックアップの表示と、ワンタップの書き出し（同期で作るのでコピーが確実に通る）
+function quickText(){const json=JSON.stringify({v:1,list:db.list,gates:db.gates||{},draft:db.draft||null});
+  return `【展示会ナビの予定のバックアップ】\n予定づくりアプリの「バックアップを読み込む」に、この文をまるごと貼り付けると予定が戻ります。\nNV1j:${b64e(new TextEncoder().encode(json))}\n（ここまで）`}
+const hasData=()=>db.list.length||(db.draft&&db.draft.picks&&db.draft.picks.length);
+function updBk(){const el=document.getElementById("bkbar");if(!el)return;
+  const show=db.onb&&view!=="setup"&&hasData()&&(db.mod||0)>(db.bk||0);el.hidden=!show;
+  if(show)el.innerHTML=`<span>まだバックアップしていない変更があります</span><button type="button" data-act="bkquick">コピーして残す</button>`}
+function quickCopy(btn){const t=quickText();
+  const ok=()=>{db.bk=Date.now();store();updBk();toast("コピーしました。LINEのKeepメモや自分あてのトークに貼っておいてください。")};
+  const fb=()=>{bk={mode:"out",text:t,msg:"自動でコピーできませんでした。下の文を長押しして「コピー」してください。",ng:true};db.bk=Date.now();store();go("list");
+    setTimeout(()=>{const ta=document.getElementById("bk-out");if(ta){ta.scrollIntoView({block:"center"});ta.focus();ta.select()}},50)};
+  try{navigator.clipboard.writeText(t).then(ok,fb)}catch(e){fb()}}
+function toast(msg){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.className="toast";el.setAttribute("role","status");document.body.appendChild(el)}
+  el.textContent=msg;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,4500)}
+
+// はじめに（1回だけ）：LINEの中ではなく普通のブラウザで開き、ホーム画面に追加してから使ってもらう
+const UA=navigator.userAgent||"";
+const ENV={line:/\bLine\//i.test(UA),ios:/iPhone|iPad|iPod/i.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1),android:/Android/i.test(UA)};
+function renderIntro(){
+  setHead("展示会ナビ","はじめに（1回だけ）");
+  const ios=ENV.ios,and=ENV.android&&!ios;
+  const lineSteps=ios?`<li>画面の右下（または右上）の <b>「…」や共有のマーク</b> を押す</li><li><b>「Safariで開く」</b>（または「ブラウザで開く」）を選ぶ</li>`
+    :`<li>画面の右上の <b>「︙」</b> を押す</li><li><b>「ブラウザで開く」</b>（または「他のアプリで開く」→ Chrome）を選ぶ</li>`;
+  const homeSteps=ios?`<li>Safariの下の <b>共有ボタン（四角から上向きの矢印）</b> を押す</li><li>下にスクロールして <b>「ホーム画面に追加」</b> を押す</li><li>右上の <b>「追加」</b> を押す</li><li>ホーム画面にできた <b>アイコンから開き直す</b></li>`
+    :and?`<li>Chromeの右上の <b>「︙」</b> を押す</li><li><b>「ホーム画面に追加」</b> を押す（「インストール」と出る場合もあります）</li><li><b>「追加」</b> を押す</li><li>ホーム画面にできた <b>アイコンから開き直す</b></li>`
+    :`<li>ブラウザのメニューから <b>「ホーム画面に追加」</b> を選ぶ</li><li>できたアイコンから開き直す</li>`;
+  V.innerHTML=`<div class="note intro"><p><b>予定は、このアプリを開いた場所（ブラウザ）の中にだけ保存されます。</b>LINEの中で開いたまま使うと、あとで消えることがあります。</p>
+    <p>先に下の手順で「ホーム画面に追加」して、<b>そのアイコンから開いてから</b>予定を作ってください。</p></div>
+    ${ENV.line?`<h2>1. LINEの外で開く</h2><ol class="isteps">${lineSteps}</ol><p class="sub">表示はLINEのバージョンで少し違います。</p>`:""}
+    <h2>${ENV.line?"2":"1"}. ホーム画面に追加する</h2><ol class="isteps">${homeSteps}</ol>
+    ${ios?`<p class="sub">iPhoneは、Safariで開いた時とホーム画面のアイコンから開いた時で、保存場所が別になることがあります。<b>予定づくりはアイコンから開いてから</b>始めてください。</p>`:""}
+    <button type="button" class="primary" data-act="onb">ホーム画面のアイコンから開いた → はじめる</button>
+    <button type="button" class="reset" data-act="onbskip">このまま使う（消えやすいのでおすすめしません）</button>`}
+
+// スタート：正面入場口で押す。回り始めの棟、または実際に入るホールから、今の時刻で組み直す
+function nowKeyMin(s){const t=todayKey(),d=new Date(),m=d.getHours()*60+d.getMinutes();return t===s.date?Math.ceil(m/5)*5:null}
+function startFrom(s,from,hall){
+  const seq=allItems(s),seen=seq.filter(it=>s.done[it.id]&&it.b!==undefined),left=seq.filter(it=>!s.done[it.id]);
+  const nm=nowKeyMin(s);if(nm!==null)s.start=fmt(Math.min(nm,DATES[s.date].close-5));
+  s.from=from||s.from;
+  const lunchPassed=s.lunchDone||(nm!==null&&nm>=toM(s.lunch)+s.lunchMin);
+  build(s,left.map(it=>({...it})),{startArea:hall||null,seen,noLunch:lunchPassed});
+  s.started=Date.now();s.startHall=hall||"";
+  if(hall){const f=AF[hall],first=allItems(s).find(it=>!s.done[it.id]&&boothPos(it.b));const fp=first?boothPos(first.b):null;
+    const nb=ENTGATE[hall];const g=gatePt(f,nb,fp?[fp.lat,fp.lng]:null);
+    s.pos=g?{h:f,b:"",lat:g.ll[0],lng:g.ll[1],gate:true,gk:g.k,nextId:first?first.id:undefined}:null}
+  else s.pos=null;
+  save()}
+let startOpen=false,hallPick=false;
+function startHTML(s){
+  const started=!!s.started;
+  const nh0=nextHall(s,s.pos);
+  if(started&&!startOpen)return `${!s.pos&&nh0?`<button type="button" class="entnav" data-act="entnav">入場口から${esc(AREAS[FA[nh0]].name)}への道順（会場マップ）</button><button type="button" class="arrive" data-act="arrive" data-h="${nh0}">${esc(AREAS[FA[nh0]].name)}の入口に着いた → 地図で案内</button>`:""}<div class="startbar"><span>${esc(fmt(new Date(s.started).getHours()*60+new Date(s.started).getMinutes()))} スタート${s.startHall?`（${esc(AREAS[s.startHall].name)}から）`:""}</span>
+    <button type="button" data-act="stopen">入口を変更・組み直す</button></div>`;
+  const ch=[["rec","おすすめ","入場口から近い順"],["west","A棟から","A棟"],["south","B棟から","B棟"],["east","C棟から","C棟"]];
+  return `<section class="start"><h2 class="sh">${started?"入口を変更して組み直す":"入場口に着いたらスタート"}</h2>
+    <p class="sub">正面入場口で押してください。押した時刻から、見ていない会社を近い順に組み直します（★は各ホールで先）。</p>
+    <div class="stgrid">${ch.map(([v,l,sm])=>`<button type="button" class="${v==="rec"?"go":""}" data-act="start" data-v="${v}"><b>${l}</b><small>${sm}</small></button>`).join("")}</div>
+    <button type="button" class="linkish" data-act="hallpick" aria-expanded="${hallPick}">${hallPick?"▲":"▼"} 空いている入口から入る（実際に入るホールを選ぶ）</button>
+    ${hallPick?`<div class="stgrid hp">${ROUTE.map(a=>`<button type="button" data-act="starth" data-a="${a}" style="--hc:var(--${AREAS[a].hall})"><b>${AREAS[a].name}</b><small>${AREAS[a].tag||""}</small></button>`).join("")}</div>`:""}
+    ${started?`<button type="button" class="reset" data-act="stclose">閉じる</button>`:""}</section>`}
+
+// 画面
+let view="list",cur=null,editing=false,arm="",draft=null;
+const V=document.getElementById("view");
+function go(v,id){if(v!=="list")bk={mode:"",text:"",msg:"",ng:false};if(v!=="plan"){startOpen=false;hallPick=false}view=v;cur=id?db.list.find(x=>x.id===id):cur;editing=false;arm="";render();window.scrollTo(0,0)}
+function render(){
+  document.getElementById("back").hidden=view==="list";
+  document.getElementById("hbtns").hidden=view!=="plan";
+  if(view!=="map")killMap();
+  document.body.classList.toggle("editing",editing&&view==="plan");
+  updBk();
+  if(!db.onb&&view==="list")return renderIntro();
+  if(view==="list")return renderList();
+  if(view==="setup")return renderSetup();
+  if(view==="map")return renderMap();
+  renderPlan();
+}
+function setHead(t,sub){document.getElementById("h1").innerHTML=`${esc(t)}<small>${esc(sub)}</small>`}
+
+function renderList(){
+  setHead("展示会ナビ",`${EVENT.name}　${VENUE.name}（架空）`);
+  const cards=db.list.map(s=>{const st=allItems(s).filter(i=>i.st),dn=st.filter(i=>s.done[i.id]).length,n=allItems(s).length;
+    return `<li class="sched"><button type="button" class="sopen" data-act="open" data-id="${s.id}"><strong>${esc(s.name)}</strong>
+      <span>${DATES[s.date].label}　${hm(s.start)}〜${hm(s.end)}　${n}か所${st.length?`　★ ${dn}/${st.length}`:""}</span></button>
+      <div class="sact"><button type="button" data-act="copy" data-id="${s.id}">複製</button>
+      <button type="button" class="del ${arm==="del"+s.id?"arm":""}" data-act="sdel" data-id="${s.id}">${arm==="del"+s.id?"もう一度押すと消えます":"消す"}</button></div></li>`}).join("");
+  V.innerHTML=`<div class="note"><b>会場も出展社もすべて架空のデモです。</b>実際の展示会では、主催者のデータに差し替えて使います。<br>着く時刻・帰る時刻・行きたい会社を入れると、ホールの近い順に回る時間割を自動で組みます。組んだあとも、会社の追加・順番の入れ替え・時刻の変更ができます。<br><b>予定は、いま開いているこのアプリ（ホーム画面のアイコン）の中だけに保存されます。</b>行きたい場所は入れるたびに保存されます。念のため、上に「コピーして残す」が出たら押して、LINEのKeepに貼っておいてください。</div>
+   ${db.draft&&db.draft.picks&&db.draft.picks.length?`<div class="note resume"><b>作りかけの予定があります</b>（行きたい場所 ${db.draft.picks.length}件 保存済み）<br><button type="button" class="primary" data-act="resume">続きから作る</button></div>`:""}
+   <button type="button" class="primary" data-act="new">＋ 新しい予定を作る</button>
+   ${db.list.length?`<h2>保存した予定</h2><ul class="slist">${cards}</ul>`
+   :`<div class="empty"><p>まだ予定がありません。</p><p>「新しい予定を作る」から始めるか、見本で試してみてください。</p><button type="button" data-act="sample">見本の予定で試す</button></div>`}
+   ${bkHTML()}`;
+}
+
+function todayKey(){const d=new Date(),k=String(d.getMonth()+1)+"-"+String(d.getDate()).padStart(2,"0");return DATES[k]?k:""}
+function newDraft(){const t=todayKey(),now=new Date().getHours()*60+new Date().getMinutes();
+  const date=t&&now<DATES[t].close?t:Object.keys(DATES)[0];
+  return {name:"",date,start:"09:30",end:fmt(DATES[date].close),lunch:"12:00",lunchMin:30,from:"rec",picks:[]}}
+function renderSetup(){
+  const d=draft,editingOld=!!d.id;
+  if(!editingOld){db.draft=d;save()}
+  setHead(editingOld?"条件を変えて組み直す":"新しい予定","着く・帰る時刻と、行きたい会社を入れる");
+  const picks=d.picks.map((p,i)=>`<li class="${p.st?"star":""}"><div class="erow"><span class="nm">${esc(p.nm)}</span>${p.b?`<span class="booth">${esc(p.b)}</span>`:`<span class="booth">${esc(AREAS[p.area]?.name||"")}</span>`}</div>
+     <div class="ebtn"><button type="button" data-act="pstar" data-i="${i}">${p.st?"★ 外す":"☆ ★にする"}</button><button type="button" class="del" data-act="pdel" data-i="${i}">消す</button></div></li>`).join("");
+  V.innerHTML=`<form id="setup" class="setup">
+    <label class="f"><span>予定の名前</span><input id="f-name" value="${esc(d.name)}" placeholder="例：山田さん 12/2"></label>
+    <label class="f"><span>行く日</span><select id="f-date">${Object.entries(DATES).map(([k,v])=>`<option value="${k}" ${d.date===k?"selected":""}>${v.label}　閉場 ${fmt(v.close).replace(/^0/,"")}</option>`).join("")}</select></label>
+    <div class="f2"><label class="f"><span>会場に着く</span><input type="time" id="f-start" value="${d.start}"></label>
+      <label class="f"><span>会場を出る</span><input type="time" id="f-end" value="${d.end}"></label></div>
+    <div class="f2"><label class="f"><span>お昼の時刻</span><input type="time" id="f-lunch" value="${d.lunch}"></label>
+      <label class="f"><span>お昼の長さ</span><select id="f-lmin">${[0,30,45,60].map(m=>`<option value="${m}" ${d.lunchMin===m?"selected":""}>${m?m+"分":"とらない"}</option>`).join("")}</select></label></div>
+    <label class="f"><span>回り始め（当日、入場口で変えられます）</span><select id="f-from">${[["rec","おすすめ（入場口から近い順）"],["west","A棟から"],["south","B棟から"],["east","C棟から"]].map(([v,l])=>`<option value="${v}" ${d.from===v?"selected":""}>${l}</option>`).join("")}</select></label>
+    <h2>行きたい会社・企画</h2>
+    <div class="add" id="padd">
+      <input id="p-name" placeholder="会社名を入れる（読みでも探せます）" autocomplete="off" data-act="aname"><div class="sugg" hidden></div>
+      <button type="button" class="pickbtn" data-pk="open">頭文字から選ぶ</button>
+      <div class="arow">${boothBox("p-booth",curPfx(),"小間の数字")}<label class="astar"><input type="checkbox" id="p-star">★</label><button type="button" data-act="padd">＋ 追加</button></div>
+      <p class="ahint" id="p-hint"></p></div>
+    ${d.picks.length?`<ul class="items picks">${picks}</ul>`:`<p class="sub">まだ入っていません。1社以上入れてください。</p>`}
+    ${editingOld?`<p class="warn">組み直すと、手で動かした順番や時刻は自動の並びに戻ります。チェックは残ります。</p>`:""}
+    <p class="ahint" id="f-hint"></p>
+    <button type="submit" class="primary">${editingOld?`この${d.picks.length}か所で組み直す`:d.picks.length?`この${d.picks.length}か所で予定を組む`:"予定を組む"}</button>
+  </form>`;
+}
+function readSetup(){const d=draft;d.name=document.getElementById("f-name").value.trim();d.date=document.getElementById("f-date").value;
+  d.start=document.getElementById("f-start").value;d.end=document.getElementById("f-end").value;d.lunch=document.getElementById("f-lunch").value;
+  d.lunchMin=+document.getElementById("f-lmin").value;d.from=document.getElementById("f-from").value}
+
+function itemHTML(it,s,i,si,plan){
+  const done=cur.done;
+  const link=it.b?`<span class="booth">${esc(it.b)}</span>`:"<span></span>";
+  const nm=`<span class="nm">${esc(it.nm)}${it.tag?`<span class="tag">${esc(it.tag)}</span>`:""}</span>`;
+  const cls=[it.st?"star":"",done[it.id]?"done":""].join(" ");
+  if(!editing)return `<li class="${cls}"><label><input type="checkbox" id="${it.id}" data-act="check" data-it="${it.id}" ${done[it.id]?"checked":""}>${nm}${link}</label></li>`;
+  const first=si===0&&i===0,last=si===plan.length-1&&i===s.items.length-1;
+  return `<li class="${cls}"><div class="erow">${nm}${link}</div><div class="ebtn">
+    <button type="button" data-act="star" data-s="${si}" data-i="${i}">${it.st?"★ 外す":"☆ ★にする"}</button>
+    <button type="button" data-act="iup" data-s="${si}" data-i="${i}" ${first?"disabled":""} aria-label="上へ">↑</button>
+    <button type="button" data-act="idn" data-s="${si}" data-i="${i}" ${last?"disabled":""} aria-label="下へ">↓</button>
+    <button type="button" class="del" data-act="idel" data-s="${si}" data-i="${i}">消す</button></div></li>`;
+}
+function renderPlan(){
+  const s=cur;setHead(s.name,`${DATES[s.date].label}　${hm(s.start)}〜${hm(s.end)}`);
+  document.getElementById("edit").textContent=editing?"編集を終える":"編集";
+  const st=allItems(s).filter(i=>i.st);document.getElementById("prog").textContent=`★ ${st.filter(i=>s.done[i.id]).length}/${st.length}`;
+  const rows=s.plan.map((x,si)=>{
+    const items=x.items.map((it,i)=>itemHTML(it,x,i,si,s.plan)).join("");
+    const time=editing?`<div class="time"><input type="time" value="${esc(x.t)}" data-act="t" data-s="${si}" aria-label="始まり"><input type="time" value="${esc(x.e||"")}" data-act="e" data-s="${si}" aria-label="終わり"></div>`
+      :`<div class="time">${hm(x.t)}${x.e?`<span>〜${hm(x.e)}</span>`:""}</div>`;
+    const tools=editing?`<div class="stools"><button type="button" data-act="sup" data-s="${si}" ${si===0?"disabled":""}>この枠を上へ</button>
+        <button type="button" data-act="sdn" data-s="${si}" ${si===s.plan.length-1?"disabled":""}>この枠を下へ</button></div>
+      <form class="add" data-s="${si}"><input id="an${x.id}" placeholder="会社名を入れる（読みでも探せます）" autocomplete="off" data-act="aname"><div class="sugg" hidden></div>
+        <button type="button" class="pickbtn" data-pk="open">頭文字から選ぶ</button>
+        <div class="arow">${boothBox("ab"+x.id,x.area&&AF[x.area]?pfxOfHall(AF[x.area]):curPfx(),"小間の数字")}<label class="astar"><input type="checkbox" id="as${x.id}">★</label><button type="submit">追加</button></div>
+        <p class="ahint" id="ah${x.id}"></p></form>`:"";
+    const mv=x.kind==="move"&&!editing?`<label class="mvchk"><input type="checkbox" data-act="check" data-it="${x.id}" ${s.done[x.id]?"checked":""}>移動した</label>`:"";
+    return `<li class="slot">${time}<div class="card ${x.hall==="move"?"plain":""} ${x.kind==="move"&&s.done[x.id]?"mvdone":""}" style="--hall:var(--${x.hall})"><div class="hall"><strong>${esc(x.name)}</strong>${x.tag?`<em>${esc(x.tag)}</em>`:""}</div>
+      ${x.sub?`<p class="sub">${esc(x.sub)}</p>`:""}${items?`<ul class="items">${items}</ul>`:""}${mv}${tools}</div></li>`}).join("");
+  V.innerHTML=`${s.short?`<div class="note warnbox">時間が足りません。どのホールにも最低15分をとると、帰る時刻を過ぎます。会社を減らすか、帰る時刻を遅くしてください。</div>`:""}
+   <div class="note">★＝特に行きたい会社。チェックで「見た」になります。右上の「編集」で、会社の追加・順番の入れ替え・時刻の変更ができます。</div>
+   ${editing?"":startHTML(s)}
+   <button type="button" class="tomap" data-act="tomap">地図で今いる場所と次の行き先を見る</button>
+   <ol class="tl">${rows}</ol>
+   <div class="pact"><button type="button" data-act="retime">今の順番のまま時間を割り振り直す</button>
+     <button type="button" data-act="resetup">条件を変えて組み直す</button>
+     <button type="button" data-act="tolist">予定の一覧へ</button>
+     <button type="button" data-act="tobk">バックアップを書き出す</button></div>
+   <p class="sub foot">ホール間の移動時間・各ホールの滞在時間は、会場図からの目安です。会場・出展社・小間番号は、すべて架空のデータです（実在のものとは関係ありません）。</p>`;
+}
+
+const swap=(a,i,j)=>{[a[i],a[j]]=[a[j],a[i]]};
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button[data-act]");if(!b)return;
+  const act=b.dataset.act,id=b.dataset.id;
+  if(act!=="sdel")arm="";
+  if(act==="new"){if(db.draft&&db.draft.picks&&db.draft.picks.length){draft=db.draft;toast("作りかけの予定を開きました。");return go("setup")}draft=newDraft();return go("setup")}
+  if(act==="resume"){draft=db.draft;return go("setup")}
+  if(act==="onb"){db.onb=Date.now();store();return render()}
+  if(act==="onbskip"){db.onb=-1;store();return render()}
+  if(act==="bkquick")return quickCopy(b);
+  if(act==="start"||act==="starth"){startFrom(cur,act==="start"?b.dataset.v:cur.from,act==="starth"?b.dataset.a:"");startOpen=false;hallPick=false;
+    if(act==="starth"){go("map");toast(`${AREAS[b.dataset.a].name}の入口から、次の小間まで案内します。`);return}
+    cur.entNav=true;save();go("map");toast("入場口から最初のホールへの道順です。ホールの入口に着いたら、オレンジのボタンを押してください。");return}
+  if(act==="hallpick"){hallPick=!hallPick;return render()}
+  if(act==="stopen"){startOpen=true;return render()}
+  if(act==="stclose"){startOpen=false;hallPick=false;return render()}
+  if(act==="sample"){draft={...newDraft(),name:"見本の予定",picks:EVENT.sample.map(p=>({...p}))};return go("setup")}
+  if(act==="open")return go("plan",id);
+  if(act==="copy"){const s=db.list.find(x=>x.id===id),c=JSON.parse(JSON.stringify(s));c.id=nid("p");c.name=s.name+"（コピー）";c.done={};db.list.unshift(c);save();return render()}
+  if(act==="sdel"){if(arm!=="del"+id){arm="del"+id;return render()}db.list=db.list.filter(x=>x.id!==id);arm="";save();return render()}
+  if(act==="tolist")return go("list");
+  if(act==="tomap")return go("map");
+  if(act==="arrive"){const h=b.dataset.h;go("map");return arriveAt(h)}
+  if(act==="entnav"){cur.entNav=true;save();return go("map")}
+  if(act==="toplan")return go("plan");
+  if(act==="tobk"){go("list");return exportBk()}
+  if(act==="bkout")return exportBk();
+  if(act==="bkin"){bk={mode:"in",text:"",msg:"",ng:false};render();const ta=document.getElementById("bk-in");if(ta)ta.focus();return}
+  if(act==="bkcopy"){const ta=document.getElementById("bk-out"),m=document.getElementById("bk-msg");
+    const sel=()=>{ta.focus();ta.select();ta.setSelectionRange(0,ta.value.length)};
+    const ok=()=>{m.className="msg";m.textContent="コピーしました。LINEのKeepメモや自分あてのトークに貼っておいてください。"};
+    const fb=()=>{sel();let d=false;try{d=document.execCommand("copy")}catch(e){}
+      if(d)ok();else{m.className="msg ng";m.textContent="自動でコピーできませんでした。選択された文を長押しして「コピー」を選んでください。"}};
+    try{navigator.clipboard.writeText(bk.text).then(ok,fb)}catch(e){fb()}return}
+  if(act==="bkload"){const t=document.getElementById("bk-in").value;
+    decodeBk(t).then(list=>{
+      if(!list.length)throw new Error("読み込める予定が入っていませんでした。");
+      let add=0,up=0;list.slice().reverse().forEach(s=>{const i=db.list.findIndex(x=>x.id===s.id);if(i>=0){db.list[i]=s;up++}else{db.list.unshift(s);add++}});
+      save();db.bk=db.mod;store();bk={mode:"",text:"",msg:`${list.length}件の予定を読み込みました（新しく${add}件・上書き${up}件）。`,ng:false};render();
+    }).catch(err=>{bk={mode:"in",text:"",msg:err&&err.message&&/[ぁ-ん]/.test(err.message)?err.message:"読み込めませんでした。文が途中で切れていないか確かめてください。",ng:true};
+      render();const ta=document.getElementById("bk-in");if(ta)ta.value=t});return}
+  if(act==="padd"){const nm=document.getElementById("p-name").value.trim(),bb=boothVal(document.getElementById("p-booth")),h=document.getElementById("p-hint");
+    readSetup();if(!nm){h.textContent="会社名を入れてください。";return}
+    const r=lookup(nm,bb);if(r.err){h.textContent=r.err;return}
+    draft.picks.push({...r.it,id:nid("i"),st:document.getElementById("p-star").checked});renderSetup();document.getElementById("p-name").focus();return}
+  if(act==="pstar"){readSetup();const p=draft.picks[+b.dataset.i];p.st=!p.st;return renderSetup()}
+  if(act==="pdel"){readSetup();draft.picks.splice(+b.dataset.i,1);return renderSetup()}
+  if(act==="retime"){retime(cur);save();return render()}
+  if(act==="resetup"){const s=cur;draft={id:s.id,name:s.name,date:s.date,start:s.start,end:s.end,lunch:s.lunch,lunchMin:s.lunchMin,from:s.from,picks:allItems(s).map(i=>({...i,area:i.area||areaOf(i)||undefined}))};return go("setup")}
+  if(view==="plan"){
+    const si=+b.dataset.s,i=+b.dataset.i,P=cur.plan,s=P[si];
+    if(act==="star")s.items[i].st=!s.items[i].st;
+    else if(act==="idel")s.items.splice(i,1);
+    else if(act==="iup"){if(i>0)swap(s.items,i,i-1);else P[si-1].items.push(s.items.shift())}
+    else if(act==="idn"){if(i<s.items.length-1)swap(s.items,i,i+1);else P[si+1].items.unshift(s.items.pop())}
+    else if(act==="sup"&&si>0)swap(P,si,si-1);
+    else if(act==="sdn"&&si<P.length-1)swap(P,si,si+1);
+    else return;
+    save();render();
+  }
+});
+document.addEventListener("input",e=>{
+  const el=e.target;if(el.dataset.act!=="aname")return;
+  const o=OPTS[el.value];if(!o)return;
+  const box=el.closest(".add");el.value=o.nm;setBooth(box,o.b);box.dataset.area=o.area||"";
+});
+document.addEventListener("change",e=>{
+  if(view==="setup"&&e.target.closest("#setup")&&e.target.id&&e.target.id.startsWith("f-")){readSetup();if(!draft.id){db.draft=draft;save();updBk()}return}
+  const el=e.target,act=el.dataset.act;if(view!=="plan")return;
+  if(act==="check"){cur.done[el.dataset.it]=el.checked;save();render()}
+  else if(act==="t"||act==="e"){cur.plan[+el.dataset.s][act]=el.value;save()}
+});
+document.addEventListener("submit",e=>{
+  e.preventDefault();const f=e.target;
+  if(f.id==="setup"){const pn=document.getElementById("p-name");
+    if(pn&&pn.value.trim()){const n0=draft.picks.length,ab=document.querySelector("#padd [data-act=padd]");if(ab)ab.click();
+      if(draft.picks.length===n0){const hh=document.getElementById("f-hint");if(hh)hh.textContent="入力中の会社を追加できませんでした。上の赤い説明を見て直すか、入力欄を空にしてください。";return}}
+    readSetup();const d=draft,h=document.getElementById("f-hint");
+    if(!d.picks.length){h.textContent="行きたい会社を1社以上入れてください。";return}
+    if(!d.start||!d.end||toM(d.end)<=toM(d.start)){h.textContent="会場を出る時刻は、着く時刻より後にしてください。";return}
+    if(toM(d.start)>=DATES[d.date].close){h.textContent="着く時刻が閉場の時刻より後になっています。";return}
+    let s=d.id?db.list.find(x=>x.id===d.id):null;
+    if(!s){s={id:nid("p"),done:{}};db.list.unshift(s)}
+    Object.assign(s,{name:d.name||`${DATES[d.date].label}の予定`,date:d.date,start:d.start,end:d.end,lunch:d.lunch||"12:00",lunchMin:d.lunchMin,from:d.from});
+    build(s,d.picks.map(p=>({id:p.id||nid("i"),nm:p.nm,b:p.b||"",area:p.area,st:!!p.st,tag:p.tag||""})));
+    if(!d.id)delete db.draft;save();cur=s;return go("plan",s.id)}
+  const s=cur.plan[+f.dataset.s],nm=document.getElementById("an"+s.id).value.trim(),bb=boothVal(document.getElementById("ab"+s.id)),h=document.getElementById("ah"+s.id);
+  if(!nm){h.textContent="会社名を入れてください。";return}
+  let it={nm,b:bb.toUpperCase()};
+  if(!bb){const r=lookup(nm,"");if(r.it)it=r.it;else if(!f.dataset.area&&r.err&&r.err.includes("件あります")){h.textContent=r.err;return}}
+  s.items.push({...it,id:nid("i"),st:document.getElementById("as"+s.id).checked,tag:"追加"});save();render();
+});
+document.getElementById("back").addEventListener("click",()=>go(view==="map"?"plan":"list"));
+document.getElementById("edit").addEventListener("click",()=>{editing=!editing;render()});
+render();
+</script>
+
+</body></html>
