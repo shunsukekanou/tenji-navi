@@ -244,7 +244,7 @@ button:focus-visible,.add input:focus-visible{outline:2px solid var(--accent);ou
 <div class="wrap">
 <header>
   <div class="hl"><button class="back" id="back" type="button" hidden>← 一覧</button>
-    <h1 id="h1">展示会ナビ<small id="h1s">テクノひなた展 2026（架空）</small></h1></div>
+    <h1 id="h1">展示会ナビ<small id="h1s">ものづくり技術・機械要素展 2027（架空）</small></h1></div>
   <div class="hbtns" id="hbtns" hidden><button class="ebtn-main" id="edit" type="button">編集</button><div class="prog" id="prog">★ 0/0</div></div>
 </header>
 <div class="bkbar" id="bkbar" hidden></div>
@@ -252,7 +252,7 @@ button:focus-visible,.add input:focus-visible{outline:2px solid var(--accent);ou
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script type="module">
-// 会場（ひなた国際展示場）と展示会（テクノひなた展）のデータは data/ の JSON から読み込む。
+// 会場（ひなた国際展示場）と展示会（ものづくり技術・機械要素展）のデータは data/ の JSON から読み込む。
 // 展示会のデータだけを差し替えれば、別の展示会のナビになる（?event=data/xxx.json）
 const Q=new URLSearchParams(location.search);
 const evUrl=/^(?:[\w-]+\/)*[\w-]+\.json$/.test(Q.get("event")||"")?Q.get("event"):"data/event.json";
