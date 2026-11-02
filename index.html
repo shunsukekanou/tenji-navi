@@ -521,14 +521,14 @@ function drawPanel(pos,nx,tr){
   if(pos&&pos.h===mapHall){const t=pos.dir&&lastTo?turnOf(pos.dir,lastFrom,lastTo):null;
     if(t)face=`<div class="turn"><div class="tarrow" style="transform:rotate(${(-t.d).toFixed(0)}deg)" aria-hidden="true">↑</div>
       <div><b>${t.w}</b><small>${pos.dirSrc==="face"?"正面の小間で合わせた向き":"歩いてきた方向から推定した向き"}が基準です。青い線が今の正面です。</small></div></div>`;
-    else if(!pos.dir)face=`<p class="fixnote" style="color:var(--muted);font-weight:500">「向きを合わせる」で正面の小間をタップすると、進む方向を矢印で出します。</p>`}
+    else if(!pos.dir)face=`<p class="fixnote" style="color:var(--muted);font-weight:500">「🧭 目の前の小間をタップ」を押して、正面に見えている小間をタップすると、進む方向を矢印で出します。</p>`}
   el.innerHTML=`${face}<div class="mrow"><span>現在地</span><div>${here}</div></div>
     <div class="mrow"><span>次へ</span><div>${next}</div></div>${steps}
-    ${faceMode?`<p class="fixnote">今向いている先（正面）の小間をタップしてください。</p>`:""}
+    ${faceMode?`<p class="fixnote">今、正面に見えている小間を地図でタップしてください。</p>`:""}
     ${fixGate?`<p class="fixnote">地図で正しい${fixGate.startsWith("en:")?"入口":"出口"}の場所をタップしてください。</p>`:""}
     ${!pos&&nh?`<button type="button" class="entnav" data-mact="tmap">入場口から${esc(hallName(nh))}への道順（会場マップ）</button><button type="button" class="arrive" data-mact="arrive" data-h="${nh}">${esc(hallName(nh))}の入口に着いた（ここから案内）</button>`:""}
     ${pos&&tr&&pos.h!==mapHall&&tr.nh===mapHall?`<button type="button" class="arrive" data-mact="moved">${esc(hallName(mapHall))}の入口に着いた（ここから案内）</button>`:""}
-    <div class="mbtns">${pos&&pos.h===mapHall?`<button type="button" class="${pos.dir?"":"go"}" data-mact="face">${faceMode?"向き合わせをやめる":"向きを合わせる"}</button>`:""}${curIt&&!s.done[curIt.id]?`<button type="button" class="go" data-mact="seen" data-it="${curIt.id}">ここを見た（チェック）</button>`:""}
+    <div class="mbtns">${pos&&pos.h===mapHall?`<button type="button" class="${pos.dir?"":"go"}" data-mact="face">${faceMode?"🧭 やめる":"🧭 目の前の小間をタップ"}</button>`:""}${curIt&&!s.done[curIt.id]?`<button type="button" class="go" data-mact="seen" data-it="${curIt.id}">ここを見た（チェック）</button>`:""}
       ${tr&&ph===mapHall?`<button type="button" class="go" data-mact="tmap">出口に着いた（移動マップへ）</button><button type="button" data-mact="moved">${esc(hallName(tr.nh))}に着いた</button>`:""}
       ${tr&&ph===mapHall&&tr.ex?`<button type="button" data-mact="fix" data-k="ex:${tr.ex.k}">${fixGate?"直すのをやめる":"出口を直す"}</button>`:""}
       ${tr&&tr.nh===mapHall&&tr.en?`<button type="button" data-mact="fix" data-k="en:${tr.en.k}">${fixGate?"直すのをやめる":"入口を直す"}</button>`:""}
