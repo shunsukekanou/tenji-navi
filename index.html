@@ -266,6 +266,9 @@ const PREF={};ROUTE.forEach(a=>AREAS[a].halls.forEach(h=>{PREF[h]=a}));
 const KEY="tenji-navi-v1";
 const load=()=>{try{const v=localStorage.getItem(KEY);return v?JSON.parse(v):null}catch(e){return null}};
 let db=load()||{list:[]};
+// 2026-11-02 会期を 2027年の暦（12/1水〜12/3金）に変えた。前の暦（12/2水〜12/4金）で保存した予定は、同じ曜日の日付に置き換える。候補に無い日付は初日にする
+if(!db.dv){const MAPD={"12-02":"12-01","12-03":"12-02","12-04":"12-03"};(db.list||[]).concat(db.draft?[db.draft]:[]).forEach(x=>{if(x&&MAPD[x.date])x.date=MAPD[x.date]});db.dv=2027}
+(db.list||[]).concat(db.draft?[db.draft]:[]).forEach(x=>{if(x&&!DATES[x.date])x.date=Object.keys(DATES)[0]});
 const store=()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}};
 const save=()=>{db.mod=Date.now();store();if(typeof updBk==="function")try{updBk()}catch(e){}};
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}
