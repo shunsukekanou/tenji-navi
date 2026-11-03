@@ -134,8 +134,9 @@ button:focus-visible,.add input:focus-visible{outline:2px solid var(--accent);ou
 .bkbar button{font:inherit;font-size:13px;font-weight:700;color:var(--surface);background:var(--accent);border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;max-width:min(92vw,520px);background:var(--fg);color:var(--bg);border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
 .intro p{margin:0 0 6px}.intro p:last-child{margin:0}
-.isteps{margin:0;padding:12px 14px 12px 32px;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:8px;font-size:15px}
-.isteps li::marker{font-family:var(--f-mono);font-weight:700;color:var(--accent)}
+.isteps{margin:0;padding:12px 14px;list-style:none;counter-reset:st;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:8px;font-size:15px}
+.isteps li{counter-increment:st;position:relative;padding-left:24px}
+.isteps li::before{content:counter(st) ".";position:absolute;left:0;font-family:var(--f-mono);font-weight:700;color:var(--accent)}  /* 番号は自前で描く（iPhone の Safari で、grid の ol の番号が枠の外に出たため 2026-11-03） */
 .resume .primary{margin-top:10px}
 .start{margin-top:14px;background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:12px;display:grid;gap:10px}
 .start .sh{margin:0;font-size:16px;color:var(--accent)}
@@ -233,8 +234,9 @@ button:focus-visible,.add input:focus-visible{outline:2px solid var(--accent);ou
 .tw-hi{fill:none;stroke:var(--accent);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:8 6}
 @media (prefers-reduced-motion:no-preference){.tw-hi{animation:twdash 1s linear infinite}@keyframes twdash{to{stroke-dashoffset:-14}}}
 .tw-from{fill:#1a73e8;stroke:#fff;stroke-width:2}.tw-to{fill:#c62828;stroke:#fff;stroke-width:2}
-.tw-steps{margin:0;padding:10px 12px 10px 30px;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:6px;font-size:14.5px}
-.tw-steps li::marker{font-family:var(--f-mono);font-weight:700;color:var(--accent)}
+.tw-steps{margin:0;padding:10px 12px;list-style:none;counter-reset:tw;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;gap:6px;font-size:14.5px}
+.tw-steps li{counter-increment:tw;position:relative;padding-left:22px}
+.tw-steps li::before{content:counter(tw) ".";position:absolute;left:0;font-family:var(--f-mono);font-weight:700;color:var(--accent)}
 .fixnote{margin:0;font-size:13px;font-weight:700;color:var(--accent)}
 .mvchk{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:14px;font-weight:700;cursor:pointer}
 .mvchk input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
